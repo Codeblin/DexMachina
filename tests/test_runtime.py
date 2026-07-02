@@ -1,6 +1,6 @@
 """Tests for tool runtime dispatch."""
 
-from droidforge.runtime import (
+from dexmachina.runtime import (
     RESERVED_COMMANDS,
     lookup_invocation,
     list_runnable_tools,
@@ -33,7 +33,7 @@ def test_frida_kill_requires_args():
 
 
 def test_prepare_dispatch_empty_frida_kill():
-    from droidforge.runtime import prepare_dispatch_args
+    from dexmachina.runtime import prepare_dispatch_args
 
     inv = lookup_invocation("frida-kill")
     assert inv is not None
@@ -42,7 +42,7 @@ def test_prepare_dispatch_empty_frida_kill():
 
 
 def test_prepare_dispatch_passes_through():
-    from droidforge.runtime import prepare_dispatch_args
+    from dexmachina.runtime import prepare_dispatch_args
 
     inv = lookup_invocation("frida-kill")
     assert inv is not None

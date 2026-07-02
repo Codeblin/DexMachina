@@ -4,19 +4,19 @@ from pathlib import Path
 
 import pytest
 
-from droidforge import installer
-from droidforge.config import META_KEY
-from droidforge.installer import InstallError, install_tools
-from droidforge.registry import get_tool
+from dexmachina import installer
+from dexmachina.config import META_KEY
+from dexmachina.installer import InstallError, install_tools
+from dexmachina.registry import get_tool
 
 
 def _cfg(root: Path) -> dict:
     return {
-        "settings": {"install_dir": ".droidforge/tools"},
+        "settings": {"install_dir": ".dexmachina/tools"},
         "pins": {},
         "ignored": {"tools": []},
         "active": {},
-        META_KEY: {"root": str(root), "path": str(root / "droidforge.toml")},
+        META_KEY: {"root": str(root), "path": str(root / "dexmachina.toml")},
     }
 
 
@@ -55,7 +55,7 @@ def test_install_direct_downloads_and_links(tmp_path, monkeypatch):
     installer._install_direct(get_tool("adb"), cfg)
 
     assert "platform-tools-latest-linux.zip" in captured["url"]
-    bin_dir = tmp_path / ".droidforge" / "tools" / "adb" / "bin"
+    bin_dir = tmp_path / ".dexmachina" / "tools" / "adb" / "bin"
     assert (bin_dir / "adb").is_file()
 
 

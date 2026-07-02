@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from droidforge.versions import FRIDA_COMPANIONS, FRIDA_EXACT, resolve_frida_target
+from dexmachina.versions import FRIDA_COMPANIONS, FRIDA_EXACT, resolve_frida_target
 
 
 def test_frida_exact_vs_companions():

@@ -3,13 +3,13 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "droidforge"
+name = "dexmachina"
 version = "0.1.0"
 description = "Android pentesting tool manager — install, update, and version-lock your toolkit"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "DroidForge Contributors" }]
+authors = [{ name = "DexMachina Contributors" }]
 keywords = ["android", "pentesting", "frida", "security"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,18 +38,18 @@ dev = [
 ]
 
 [project.scripts]
-droidforge = "droidforge.cli:main"
+dexmachina = "dexmachina.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/droidforge/droidforge"
-Repository = "https://github.com/droidforge/droidforge"
+Homepage = "https://github.com/Codeblin/dexmachina"
+Repository = "https://github.com/Codeblin/dexmachina"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["droidforge*"]
+include = ["dexmachina*"]
 
 [tool.setuptools.package-data]
-droidforge = ["../droidforge.toml.default", "scripts/*.js"]
+dexmachina = ["../dexmachina.toml.default", "scripts/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

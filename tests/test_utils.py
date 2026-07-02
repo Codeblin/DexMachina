@@ -1,6 +1,6 @@
 """Tests for version comparison utilities."""
 
-from droidforge.utils import (
+from dexmachina.utils import (
     compare_versions,
     find_git,
     normalize_version,

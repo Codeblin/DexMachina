@@ -20,12 +20,12 @@ venv/
 .venv/
 env/
 
-# DroidForge workspace (downloaded tools, caches, repo-local venvs)
-.droidforge/
+# DexMachina workspace (downloaded tools, caches, repo-local venvs)
+.dexmachina/
 
-# Local project config (from `droidforge init` / `droidforge lock` — user-specific)
-droidforge.toml
-droidforge.lock.toml
+# Local project config (from `dexmachina init` / `dexmachina lock` — user-specific)
+dexmachina.toml
+dexmachina.lock.toml
 
 # IDE / editor
 .idea/

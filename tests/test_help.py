@@ -2,12 +2,12 @@
 
 from click.testing import CliRunner
 
-from droidforge.cli import main
-from droidforge.help_fmt import DroidForgeGroup
+from dexmachina.cli import main
+from dexmachina.help_fmt import DexMachinaGroup
 
 
 def test_main_uses_categorized_group():
-    assert isinstance(main, DroidForgeGroup)
+    assert isinstance(main, DexMachinaGroup)
 
 
 def test_help_has_sections():

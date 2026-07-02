@@ -2,13 +2,13 @@
 
 import pytest
 
-from droidforge.profiles import (
+from dexmachina.profiles import (
     PROFILES,
     profile_description,
     profile_names,
     resolve_profile,
 )
-from droidforge.registry import TOOLS
+from dexmachina.registry import TOOLS
 
 
 def test_minimal_profile_tools():

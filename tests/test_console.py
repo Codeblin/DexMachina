@@ -1,7 +1,7 @@
-"""Tests for the interactive DroidForge console (REPL)."""
+"""Tests for the interactive DexMachina console (REPL)."""
 
-import droidforge.console as console_mod
-from droidforge.console import DroidForgeConsole
+import dexmachina.console as console_mod
+from dexmachina.console import DexMachinaConsole
 
 
 def _make(monkeypatch, devices=None, apps=None):
@@ -10,7 +10,7 @@ def _make(monkeypatch, devices=None, apps=None):
     monkeypatch.setattr(
         console_mod, "list_android_apps", lambda cfg, serial=None: list(apps or [])
     )
-    return DroidForgeConsole(config={}, serial=None)
+    return DexMachinaConsole(config={}, serial=None)
 
 
 def test_prompt_reflects_state(monkeypatch):

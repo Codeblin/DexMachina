@@ -1,6 +1,6 @@
 """Tests for progress indicators."""
 
-from droidforge.progress import work_progress, work_spinner
+from dexmachina.progress import work_progress, work_spinner
 
 
 def test_work_spinner_runs():

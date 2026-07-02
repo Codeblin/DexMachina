@@ -1,44 +1,44 @@
-# DroidForge
+# DexMachina
 
 **Android pentest environment manager** — install, sync, diagnose, and repair your entire mobile security toolkit from one CLI.
 
-DroidForge is evolving from a tool manager into a full **Android penetration environment**: one command to get adb, frida, jadx, apktool, and the rest of your kit installed, version-locked, and working together. It solves dependency hell — tools like `objection`, `r2frida`, and `frida-tools` all require the exact same `frida` version, and `apktool` needs a compatible JDK.
+DexMachina is evolving from a tool manager into a full **Android penetration environment**: one command to get adb, frida, jadx, apktool, and the rest of your kit installed, version-locked, and working together. It solves dependency hell — tools like `objection`, `r2frida`, and `frida-tools` all require the exact same `frida` version, and `apktool` needs a compatible JDK.
 
 ## Install
 
 ```bash
-git clone <repo-url> droidforge
-cd droidforge
+git clone https://github.com/Codeblin/dexmachina.git
+cd dexmachina
 pip install -e ".[dev]"
 ```
 
 Run via the installed entrypoint or as a module:
 
 ```bash
-droidforge --help          # full ASCII banner + commands
-droidforge status          # compact banner + tool table
-python -m droidforge doctor
+dexmachina --help          # full ASCII banner + commands
+dexmachina status          # compact banner + tool table
+python -m dexmachina doctor
 ```
 
-Set `DROIDFORGE_NO_BANNER=1` or pass `--no-banner` to suppress the ASCII art (useful for scripts/CI).
+Set `DEXMACHINA_NO_BANNER=1` or pass `--no-banner` to suppress the ASCII art (useful for scripts/CI).
 
 ## Use it as a self-contained pentest environment (recommended)
 
 Turn any repo into a portable Android pentest kit. Tools are downloaded into
-`./.droidforge/tools/`, version-locked, and added to your `PATH` on demand —
+`./.dexmachina/tools/`, version-locked, and added to your `PATH` on demand —
 the heavy binaries stay **gitignored**, while the config and lockfile are
 committed for reproducibility.
 
 ```bash
 cd my-engagement-repo
 
-droidforge init                 # create droidforge.toml + .gitignore + .droidforge/tools
-droidforge up                   # install the profile + set up frida (one command)
-droidforge console              # interactive pentest REPL (recommended)
-droidforge shell                # …or a raw subshell with every tool on PATH
+dexmachina init                 # create dexmachina.toml + .gitignore + .dexmachina/tools
+dexmachina up                   # install the profile + set up frida (one command)
+dexmachina console              # interactive pentest REPL (recommended)
+dexmachina shell                # …or a raw subshell with every tool on PATH
 ```
 
-Inside `droidforge shell`, tools like `jadx`, `apktool`, `objection`, and
+Inside `dexmachina shell`, tools like `jadx`, `apktool`, `objection`, and
 `frida` are directly on your `PATH`. Type `exit` to leave.
 
 ## Pentest a rooted emulator — full walkthrough
@@ -48,25 +48,25 @@ Genymotion / rooted AVD / Corellium instance, visible via `adb devices`):
 
 ```bash
 # 0) one-time: build the dynamic-analysis kit (adb, frida, objection, …)
-droidforge up --profile dynamic
+dexmachina up --profile dynamic
 
 # 1) drop into the interactive console
-droidforge console
+dexmachina console
 ```
 
-Then drive the engagement from the **DroidForge console**:
+Then drive the engagement from the **DexMachina console**:
 
 ```text
-droidforge [no-device | no-target]> devices          # auto-selects a single device
-droidforge [emulator-5554 | no-target]> ready        # push + start frida-server
-droidforge [emulator-5554 | no-target]> apps owasp   # find your target (filter)
-droidforge [emulator-5554 | no-target]> target com.example.app
-droidforge [emulator-5554 | com.example.app]> status # device + frida + target summary
-droidforge [emulator-5554 | com.example.app]> proxy 10.0.2.2:8080   # route HTTPS to Burp
-droidforge [emulator-5554 | com.example.app]> hook   # SSL pinning + root bypass (spawn)
-droidforge [emulator-5554 | com.example.app]> objection             # interactive explorer
-droidforge [emulator-5554 | com.example.app]> logcat com.example.app   # watch logs
-droidforge [emulator-5554 | com.example.app]> exit
+dexmachina [no-device | no-target]> devices          # auto-selects a single device
+dexmachina [emulator-5554 | no-target]> ready        # push + start frida-server
+dexmachina [emulator-5554 | no-target]> apps owasp   # find your target (filter)
+dexmachina [emulator-5554 | no-target]> target com.example.app
+dexmachina [emulator-5554 | com.example.app]> status # device + frida + target summary
+dexmachina [emulator-5554 | com.example.app]> proxy 10.0.2.2:8080   # route HTTPS to Burp
+dexmachina [emulator-5554 | com.example.app]> hook   # SSL pinning + root bypass (spawn)
+dexmachina [emulator-5554 | com.example.app]> objection             # interactive explorer
+dexmachina [emulator-5554 | com.example.app]> logcat com.example.app   # watch logs
+dexmachina [emulator-5554 | com.example.app]> exit
 ```
 
 The console keeps **live session state** (selected device + target app), so you
@@ -89,46 +89,46 @@ CLI uses (`device ready`, `bypass`, `objection`, …) — just faster to chain.
 | `screenshot [file.png]` | Capture the screen to a local PNG |
 | `adb <args>` / `adbshell` | Run adb / open an interactive adb shell |
 | `pull` / `push` | Copy files off/onto the device |
-| `ps` / `run <tool> [args]` | List processes / run any DroidForge tool |
+| `ps` / `run <tool> [args]` | List processes / run any DexMachina tool |
 | `clear` · `help` · `exit` | Housekeeping |
 
 Reproduce the exact kit on another machine:
 
 ```bash
-droidforge lock                 # write droidforge.lock.toml (commit this)
+dexmachina lock                 # write dexmachina.lock.toml (commit this)
 # … teammate clones the repo …
-droidforge restore              # install the locked tools + frida runtime
+dexmachina restore              # install the locked tools + frida runtime
 ```
 
 ## Quick Start
 
 ```bash
 # One-command environment (auto-inits a repo-local workspace inside a git repo)
-droidforge up --profile dynamic
+dexmachina up --profile dynamic
 
 # See / inspect profiles
-droidforge profile list
-droidforge profile show static
+dexmachina profile list
+dexmachina profile show static
 
 # Drive an engagement interactively
-droidforge console              # pentest REPL with live device + target state
+dexmachina console              # pentest REPL with live device + target state
 
 # Put every installed tool on PATH
-droidforge shell                # subshell (easiest)
-droidforge env                  # or print the PATH snippet for your shell
+dexmachina shell                # subshell (easiest)
+dexmachina env                  # or print the PATH snippet for your shell
 
 # Get a single tool, downloaded + on PATH + verified
-droidforge get jadx
+dexmachina get jadx
 
 # Get a device frida-ready in one shot (runtime + push-server + verify)
-droidforge device ready
+dexmachina device ready
 
 # Check what's installed vs latest (use --offline to skip network)
-droidforge status --offline
+dexmachina status --offline
 
 # Diagnose / auto-repair
-droidforge doctor
-droidforge fix --bootstrap
+dexmachina doctor
+dexmachina fix --bootstrap
 ```
 
 ## Commands
@@ -137,46 +137,46 @@ droidforge fix --bootstrap
 
 | Command | Description |
 |---------|-------------|
-| `droidforge init [--profile NAME] [--force]` | Create a repo-local workspace (config + `.gitignore` + `.droidforge/tools`) |
-| `droidforge up [--profile NAME] [--no-frida] [--yes]` | Build the environment: install a profile + set up frida + write lockfile |
-| `droidforge console [--device SERIAL]` | Interactive pentest REPL with live device + target state |
-| `droidforge shell` | Open a subshell with every installed tool on `PATH` |
-| `droidforge profile list` / `show <name>` | List profiles or inspect a profile's tools |
-| `droidforge lock` | Write `droidforge.lock.toml` from the current kit |
-| `droidforge restore [--yes]` | Install tools/frida exactly as recorded in the lockfile |
+| `dexmachina init [--profile NAME] [--force]` | Create a repo-local workspace (config + `.gitignore` + `.dexmachina/tools`) |
+| `dexmachina up [--profile NAME] [--no-frida] [--yes]` | Build the environment: install a profile + set up frida + write lockfile |
+| `dexmachina console [--device SERIAL]` | Interactive pentest REPL with live device + target state |
+| `dexmachina shell` | Open a subshell with every installed tool on `PATH` |
+| `dexmachina profile list` / `show <name>` | List profiles or inspect a profile's tools |
+| `dexmachina lock` | Write `dexmachina.lock.toml` from the current kit |
+| `dexmachina restore [--yes]` | Install tools/frida exactly as recorded in the lockfile |
 
 ### Environment
 
 | Command | Description |
 |---------|-------------|
-| `droidforge status [--category NAME] [--offline]` | Table of installed vs latest versions |
-| `droidforge install <tool> [--version X.Y.Z] [--force]` | Install tool + dependencies |
-| `droidforge get <tool>` | Install a tool, put it on `PATH`, and verify it's runnable |
-| `droidforge install --all` | Install entire registry (topological order) |
-| `droidforge update [tool] [--all] [--force]` | Update to latest; pin groups update atomically |
-| `droidforge pin <tool> <version>` | Lock tool/pin-group version in config |
-| `droidforge unpin <tool>` | Remove version lock |
-| `droidforge env [--frida-only]` | Print PATH setup for all tools (or just the frida venv) |
-| `droidforge doctor` | Environment health report |
-| `droidforge fix [--dry-run] [--yes] [--bootstrap] [--aggressive]` | Diagnose and auto-repair issues |
+| `dexmachina status [--category NAME] [--offline]` | Table of installed vs latest versions |
+| `dexmachina install <tool> [--version X.Y.Z] [--force]` | Install tool + dependencies |
+| `dexmachina get <tool>` | Install a tool, put it on `PATH`, and verify it's runnable |
+| `dexmachina install --all` | Install entire registry (topological order) |
+| `dexmachina update [tool] [--all] [--force]` | Update to latest; pin groups update atomically |
+| `dexmachina pin <tool> <version>` | Lock tool/pin-group version in config |
+| `dexmachina unpin <tool>` | Remove version lock |
+| `dexmachina env [--frida-only]` | Print PATH setup for all tools (or just the frida venv) |
+| `dexmachina doctor` | Environment health report |
+| `dexmachina fix [--dry-run] [--yes] [--bootstrap] [--aggressive]` | Diagnose and auto-repair issues |
 
 ### Device & arsenal
 
 | Command | Description |
 |---------|-------------|
-| `droidforge device list` | List connected ADB devices |
-| `droidforge device ready [--device SERIAL]` | Ensure frida runtime + push frida-server + verify with `frida-ps -U` |
-| `droidforge push-server [--device SERIAL] [--no-start]` | Push frida-server matching local frida |
-| `droidforge info [tool]` | Tool catalog, or detail card for one tool |
-| `droidforge arsenal` | List runnable tool CLIs (ready / missing) |
-| `droidforge run <tool> [args…]` | Run a tool via explicit dispatch |
-| `droidforge <tool> [args…]` | Direct dispatch (e.g. `droidforge frida -U`) |
-| `droidforge config` | Show `droidforge.toml` |
-| `droidforge config set <key> <value>` | Update a setting |
+| `dexmachina device list` | List connected ADB devices |
+| `dexmachina device ready [--device SERIAL]` | Ensure frida runtime + push frida-server + verify with `frida-ps -U` |
+| `dexmachina push-server [--device SERIAL] [--no-start]` | Push frida-server matching local frida |
+| `dexmachina info [tool]` | Tool catalog, or detail card for one tool |
+| `dexmachina arsenal` | List runnable tool CLIs (ready / missing) |
+| `dexmachina run <tool> [args…]` | Run a tool via explicit dispatch |
+| `dexmachina <tool> [args…]` | Direct dispatch (e.g. `dexmachina frida -U`) |
+| `dexmachina config` | Show `dexmachina.toml` |
+| `dexmachina config set <key> <value>` | Update a setting |
 
 ## Profiles
 
-Profiles are curated tool bundles for one-command setup with `droidforge up --profile NAME`:
+Profiles are curated tool bundles for one-command setup with `dexmachina up --profile NAME`:
 
 | Profile | Tools |
 |---------|-------|
@@ -189,30 +189,30 @@ Profiles are curated tool bundles for one-command setup with `droidforge up --pr
 
 ## Repo-local layout
 
-`droidforge init` produces a portable, reproducible workspace:
+`dexmachina init` produces a portable, reproducible workspace:
 
 ```text
 my-repo/
-├── droidforge.toml         # committed — settings + profile + pins
-├── droidforge.lock.toml    # committed — exact installed versions (droidforge lock)
+├── dexmachina.toml         # committed — settings + profile + pins
+├── dexmachina.lock.toml    # committed — exact installed versions (dexmachina lock)
 ├── .gitignore              # auto-updated to ignore downloaded tools
-└── .droidforge/
+└── .dexmachina/
     ├── tools/              # downloaded CLIs/jars (gitignored)
     └── cache/              # PyPI/GitHub cache (gitignored)
 ```
 
-Frida runtimes live in per-version venvs under `~/.droidforge/venvs/` (machine-specific,
-recreated by `droidforge use` / `droidforge restore`), so they're never committed.
+Frida runtimes live in per-version venvs under `~/.dexmachina/venvs/` (machine-specific,
+recreated by `dexmachina use` / `dexmachina restore`), so they're never committed.
 
 ## Configuration
 
-`~/.droidforge/droidforge.toml` (or `./droidforge.toml` in the project directory):
+`~/.dexmachina/dexmachina.toml` (or `./dexmachina.toml` in the project directory):
 
 ```toml
 [settings]
 adb_path = "adb"
 java_path = "java"
-install_dir = "~/.droidforge/tools"
+install_dir = "~/.dexmachina/tools"
 auto_push_frida_server = false
 
 [pins]
@@ -226,33 +226,33 @@ tools = ["ghidra", "wireshark"]
 
 The **frida runtime** (pip package `frida`) uses the version you care about for device hooks — e.g. `17.11.0`.
 
-**frida-tools** and **objection** have **their own** pip version numbers (e.g. `14.9.0`, `1.12.5`) but must be compatible with the frida runtime. DroidForge never installs `frida-tools==17.11.0` — that was the old bug.
+**frida-tools** and **objection** have **their own** pip version numbers (e.g. `14.9.0`, `1.12.5`) but must be compatible with the frida runtime. DexMachina never installs `frida-tools==17.11.0` — that was the old bug.
 
 | Command | What it does |
 |---------|----------------|
-| `droidforge use 17.11.0` | **nvm-style** — create/select isolated venv for this runtime |
-| `droidforge use latest` | Use latest frida release |
-| `droidforge sync frida` | Align global pip: exact frida + upgrade companions |
-| `droidforge pin frida 17.11.0` | Save preference in config (then `use` or `sync`) |
-| `droidforge versions frida` | Show active, pinned, installed, PyPI releases |
-| `droidforge env` | Print `PATH` snippet for active venv |
+| `dexmachina use 17.11.0` | **nvm-style** — create/select isolated venv for this runtime |
+| `dexmachina use latest` | Use latest frida release |
+| `dexmachina sync frida` | Align global pip: exact frida + upgrade companions |
+| `dexmachina pin frida 17.11.0` | Save preference in config (then `use` or `sync`) |
+| `dexmachina versions frida` | Show active, pinned, installed, PyPI releases |
+| `dexmachina env` | Print `PATH` snippet for active venv |
 
-After `droidforge use X`, run the `droidforge env` output in your shell, then `droidforge push-server`.
+After `dexmachina use X`, run the `dexmachina env` output in your shell, then `dexmachina push-server`.
 
-### Arsenal — run tools through DroidForge
+### Arsenal — run tools through DexMachina
 
 Tools with a CLI are registered as native commands:
 
 ```bash
-droidforge arsenal              # ready vs missing
-droidforge frida --version
-droidforge frida-ps -U
-droidforge objection explore
-droidforge jadx --help
-droidforge run mitmproxy        # explicit form
+dexmachina arsenal              # ready vs missing
+dexmachina frida --version
+dexmachina frida-ps -U
+dexmachina objection explore
+dexmachina jadx --help
+dexmachina run mitmproxy        # explicit form
 ```
 
-Resolution order: **active frida venv** → `~/.droidforge/tools/*/bin` → system `PATH`.
+Resolution order: **active frida venv** → `~/.dexmachina/tools/*/bin` → system `PATH`.
 
 ## Tool Categories
 
@@ -267,7 +267,7 @@ Resolution order: **active frida venv** → `~/.droidforge/tools/*/bin` → syst
 
 Manual-only tools appear in `status` and `doctor` with install instructions but are not auto-installed.
 
-## `droidforge fix`
+## `dexmachina fix`
 
 Three-phase repair flow: **diagnose → plan → apply → re-check**.
 
@@ -300,13 +300,13 @@ Each fix shows an **Impact** column — how disruptive the change is, **not** a 
 |-------|---------|
 | **Low impact** | One tool or device; easily reversed (install adb, push frida-server, reinstall one tool) |
 | **Medium impact** | Multiple packages or version bumps together (sync frida pin group, `--aggressive` updates) |
-| **High impact / manual** | DroidForge cannot apply automatically (upgrade Python, install JDK, plug in a device) |
+| **High impact / manual** | DexMachina cannot apply automatically (upgrade Python, install JDK, plug in a device) |
 
-Every `droidforge fix` run prints a legend panel explaining these before the plan. Use `--no-legend` to hide it.
+Every `dexmachina fix` run prints a legend panel explaining these before the plan. Use `--no-legend` to hide it.
 
 ## Roadmap: Pentest Environment
 
-DroidForge aims to become a batteries-included Android pentest environment:
+DexMachina aims to become a batteries-included Android pentest environment:
 
 - **Today** — tool registry, version pinning, doctor, fix, frida-server push
 - **Next** — environment profiles (`minimal`, `dynamic`, `full`), PATH/setup shell hook, workspace templates
@@ -314,7 +314,7 @@ DroidForge aims to become a batteries-included Android pentest environment:
 
 ## GitHub API
 
-Release versions are fetched from the GitHub Releases API with a 1-hour cache in `~/.droidforge/cache/`. Set `GITHUB_TOKEN` to avoid rate limits.
+Release versions are fetched from the GitHub Releases API with a 1-hour cache in `~/.dexmachina/cache/`. Set `GITHUB_TOKEN` to avoid rate limits.
 
 ## Development
 

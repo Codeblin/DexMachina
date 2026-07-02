@@ -1,6 +1,6 @@
 """Tests for repo-local workspace init and .gitignore management."""
 
-from droidforge.workspace import (
+from dexmachina.workspace import (
     GITIGNORE_ENTRIES,
     find_git_root,
     init_workspace,
@@ -11,12 +11,12 @@ from droidforge.workspace import (
 def test_init_creates_config_and_dirs(tmp_path):
     result = init_workspace(tmp_path, profile="minimal")
     assert result.created_config
-    assert result.config_path == tmp_path / "droidforge.toml"
+    assert result.config_path == tmp_path / "dexmachina.toml"
     assert result.config_path.exists()
-    assert (tmp_path / ".droidforge" / "tools").is_dir()
+    assert (tmp_path / ".dexmachina" / "tools").is_dir()
 
     body = result.config_path.read_text(encoding="utf-8")
-    assert 'install_dir = ".droidforge/tools"' in body
+    assert 'install_dir = ".dexmachina/tools"' in body
     assert 'profile = "minimal"' in body
 
 

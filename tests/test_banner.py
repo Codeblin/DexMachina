@@ -2,20 +2,20 @@
 
 import os
 
-from droidforge.banner import banner_enabled, render_banner
+from dexmachina.banner import banner_enabled, render_banner
 
 
 def test_banner_enabled_default():
-    os.environ.pop("DROIDFORGE_NO_BANNER", None)
+    os.environ.pop("DEXMACHINA_NO_BANNER", None)
     assert banner_enabled() is True
 
 
 def test_banner_disabled_via_env():
-    os.environ["DROIDFORGE_NO_BANNER"] = "1"
+    os.environ["DEXMACHINA_NO_BANNER"] = "1"
     try:
         assert banner_enabled() is False
     finally:
-        os.environ.pop("DROIDFORGE_NO_BANNER", None)
+        os.environ.pop("DEXMACHINA_NO_BANNER", None)
 
 
 def test_render_banner_compact():
