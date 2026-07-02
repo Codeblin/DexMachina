@@ -15,6 +15,7 @@ from droidforge.bypass import (
     choose_engine,
     list_android_apps,
     resolve_android_target,
+    run_bypass,
     script_path,
 )
 
@@ -120,6 +121,18 @@ def test_build_frida_argv_attach_by_identifier():
     assert len(script_flags) == 2
 
 
+def test_build_frida_argv_prefers_identifier_over_pid():
+    cfg = {}
+    recipe = RECIPES["ssl"]
+    target = ResolvedTarget("com.example.app", "com.example.app", 1234, "App", False)
+    with patch("droidforge.bypass.resolve_executable", return_value=["frida"]):
+        argv = build_frida_argv(
+            cfg, recipe, target, serial=None, network=False, foremost=False
+        )
+    assert "-N" in argv and "com.example.app" in argv
+    assert "-p" not in argv
+
+
 def test_choose_engine_prefers_objection_for_ssl():
     cfg = {}
     with patch("droidforge.bypass._tool_ready", side_effect=lambda _c, tool, _e: tool == "objection"):
@@ -131,3 +144,56 @@ def test_choose_engine_uses_frida_for_root():
     with patch("droidforge.bypass._medusa_root_available", return_value=True):
         with patch("droidforge.bypass._tool_ready", side_effect=lambda _c, tool, _e: tool == "frida"):
             assert choose_engine(cfg, "auto", "root") == "frida"
+
+
+def test_run_bypass_force_stops_before_spawn():
+    cfg = {}
+    apps = [AndroidApp(None, "TalentCards", "com.talentcards.android")]
+    with patch("droidforge.bypass.list_android_apps", return_value=apps):
+        with patch("droidforge.bypass.choose_engine", return_value="frida"):
+            with patch("droidforge.bypass._tool_ready", return_value=True):
+                with patch("droidforge.bypass.preflight"):
+                    with patch("droidforge.bypass.force_stop_app") as stop:
+                        with patch("droidforge.bypass._run_frida_session", return_value=(0, 1.0)):
+                            code = run_bypass(
+                                cfg,
+                                "all",
+                                "com.talentcards.android",
+                                spawn=True,
+                            )
+    assert code == 0
+    stop.assert_called_once_with(cfg, "com.talentcards.android", serial=None)
+
+
+def test_run_bypass_spawn_failure_falls_back_to_attach():
+    cfg = {}
+    apps_stopped = [AndroidApp(None, "TalentCards", "com.talentcards.android")]
+    attach_target = ResolvedTarget(
+        "com.talentcards.android",
+        "com.talentcards.android",
+        None,
+        "TalentCards",
+        False,
+    )
+    with patch("droidforge.bypass.list_android_apps", return_value=apps_stopped):
+        with patch("droidforge.bypass.choose_engine", return_value="frida"):
+            with patch("droidforge.bypass._tool_ready", return_value=True):
+                with patch("droidforge.bypass.preflight"):
+                    with patch("droidforge.bypass.force_stop_app"):
+                        with patch("droidforge.bypass.launch_app"):
+                            with patch(
+                                "droidforge.bypass._wait_for_running_app",
+                                return_value=attach_target,
+                            ):
+                                with patch(
+                                    "droidforge.bypass._run_frida_session",
+                                    side_effect=[(1, 0.5), (0, 5.0)],
+                                ) as run_sess:
+                                    code = run_bypass(
+                                        cfg,
+                                        "all",
+                                        "com.talentcards.android",
+                                        spawn=True,
+                                    )
+    assert code == 0
+    assert run_sess.call_count == 2

@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+venv/
+.venv/
+env/
+
+# DroidForge workspace (downloaded tools, caches, repo-local venvs)
+.droidforge/
+
+# Local project config (from `droidforge init` / `droidforge lock` — user-specific)
+droidforge.toml
+droidforge.lock.toml
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pentest / local secrets (certs, env files)
+*.cer
+*.der
+*.pem
+*.p12
+.env
+.env.*

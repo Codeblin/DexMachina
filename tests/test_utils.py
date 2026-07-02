@@ -39,4 +39,4 @@ def test_compare_none_returns_none():
 def test_find_git_returns_path_or_none():
     # On CI/dev machines git may or may not exist; function must not crash.
     result = find_git()
-    assert result is None or result.endswith(("git", "git.exe"))
+    assert result is None or result.lower().endswith(("git", "git.exe"))

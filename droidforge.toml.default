@@ -2,6 +2,8 @@
 adb_path = "adb"
 java_path = "java"
 install_dir = "~/.droidforge/tools"
+# Default profile for `droidforge up` (minimal | dynamic | static | traffic | scanners | full)
+# profile = "dynamic"
 auto_push_frida_server = false
 
 [pins]

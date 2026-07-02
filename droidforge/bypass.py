@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import re
 import subprocess
-import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from rich.console import Console
 
+from droidforge.device import force_stop_app, frida_server_status, launch_app, print_frida_attach_troubleshooting
 from droidforge.medusa_modules import MEDUSA_ROOT_SPEC, medusa_install_dir, resolve_bypass_script
 from droidforge.registry import get_tool
 from droidforge.runtime import RunError, build_run_env, resolve_executable
@@ -259,12 +260,27 @@ def choose_engine(config: dict, engine: Engine, recipe_id: RecipeId = "ssl") -> 
     )
 
 
-def preflight(config: dict, *, network: bool) -> None:
+def preflight(config: dict, *, network: bool, serial: str | None = None) -> None:
     if network:
         return
     if not which("adb"):
         console.print("[yellow]Warning:[/] adb not found — ensure a device is reachable.")
         return
+
+    status = frida_server_status(config, serial)
+    if status.running and status.device_rooted and not status.runs_as_root:
+        console.print(
+            "[bold yellow]Warning:[/] frida-server is running as [bold]shell[/], not [bold]root[/].\n"
+            "Attach will fail with [dim]unable to access process[/] on most apps.\n"
+            "  [dim]Fix:[/] [cyan]droidforge push-server[/]  "
+            "[dim](restarts as root when su works)[/]\n"
+        )
+    elif status.running and not status.device_rooted:
+        console.print(
+            "[yellow]Warning:[/] device does not appear rooted — Frida attach to "
+            "third-party apps usually fails.\n"
+        )
+
     env = build_run_env(config)
     frida_ps = None
     if _tool_ready(config, "frida-tools", "frida-ps"):
@@ -333,10 +349,12 @@ def build_frida_argv(
     elif target.spawn:
         # Frida 17+: auto-resumes after spawn; --no-pause was removed (--pause opts in).
         argv.extend(["-f", target.identifier])
+    elif target.identifier and target.identifier != "frontmost":
+        # Android: package identifier beats PID (PIDs churn; wrong process is common).
+        argv.extend(["-N", target.identifier])
     elif target.pid is not None:
         argv.extend(["-p", str(target.pid)])
     else:
-        # Attach by Android package identifier (not process display name).
         argv.extend(["-N", target.identifier])
     for script_name in recipe.frida_scripts:
         argv.extend(["-l", str(script_path(script_name, config))])
@@ -369,6 +387,121 @@ def print_recipe_banner(
     )
 
 
+def _wait_for_running_app(
+    config: dict,
+    package: str,
+    *,
+    serial: str | None,
+    timeout_s: float = 18.0,
+) -> ResolvedTarget | None:
+    """Poll frida-ps until the package is running, then return an attach target."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            target = resolve_android_target(
+                config, package, spawn=False, serial=serial, foremost=False
+            )
+        except BypassError:
+            target = None
+        if target and target.pid is not None:
+            # Attach by package (-N), not PID — more reliable after adb launch.
+            return ResolvedTarget(
+                target.query,
+                target.identifier,
+                None,
+                target.display_name,
+                spawn=False,
+            )
+        time.sleep(1.0)
+    return None
+
+
+def _print_attach_failure_help(package: str, serial: str | None, config: dict) -> None:
+    print_frida_attach_troubleshooting(config, serial=serial, package=package)
+
+
+def _print_spawn_failure_help(package: str, serial: str | None) -> None:
+    serial_flag = f" -S {serial}" if serial else ""
+    console.print(
+        "\n[yellow]Spawn failed[/] — this app may block Frida cold start.\n\n"
+        "[bold]Try attach mode[/] (open the app on the device first, no --spawn):\n"
+        f"  [cyan]droidforge hook -n {package}{serial_flag}[/]\n\n"
+        "[bold]Or retry spawn[/] after a clean stop:\n"
+        f"  [cyan]adb shell am force-stop {package}[/]\n"
+        f"  [cyan]droidforge hook -n {package} --spawn{serial_flag}[/]\n\n"
+        "[bold]Or Objection[/] (sometimes works when Frida spawn does not):\n"
+        f"  [cyan]droidforge hook -n {package} --objection --spawn{serial_flag}[/]\n\n"
+        "[dim]Physical devices and hardened apps often need attach, not spawn.[/]"
+    )
+
+
+def _run_frida_session(argv: list[str], env: dict) -> tuple[int, float]:
+    """Run frida interactively; return exit code and elapsed seconds."""
+    start = time.monotonic()
+    code = subprocess.run(argv, env=env).returncode
+    return code, time.monotonic() - start
+
+
+def _attempt_attach_after_spawn_failure(
+    config: dict,
+    recipe: BypassRecipe,
+    package: str,
+    *,
+    serial: str | None,
+    network: bool,
+) -> int | None:
+    """Launch the app via adb and attach with the same scripts. Returns exit code or None."""
+    console.print(
+        "[yellow]Spawn failed[/] — switching to attach mode (package name, not PID)…"
+    )
+
+    apps = list_android_apps(config, serial=serial)
+    running = next((a for a in apps if a.identifier == package and a.running), None)
+    if not running:
+        console.print("[dim]Launching app via adb…[/]")
+        try:
+            launch_app(config, package, serial=serial)
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[red]Could not launch {package}:[/] {e}")
+            return None
+    else:
+        console.print(f"[dim]App already running (pid={running.pid}) — attaching…[/]")
+
+    target = _wait_for_running_app(config, package, serial=serial)
+    if not target:
+        console.print(
+            f"[red]Timed out waiting for {package} to start.[/] "
+            "Open it manually on the device and retry without [cyan]--spawn[/]."
+        )
+        return None
+
+    env = build_run_env(config)
+    last_code = 1
+    for attempt in range(3):
+        if attempt:
+            console.print(f"[dim]Attach retry {attempt + 1}/3…[/]")
+            time.sleep(2.0)
+        argv = build_frida_argv(
+            config,
+            recipe,
+            target,
+            serial=serial,
+            network=network,
+            foremost=False,
+        )
+        console.print(f"[dim]Running:[/] {' '.join(argv)}\n")
+        code, elapsed = _run_frida_session(argv, env)
+        last_code = code
+        if code == 0:
+            return code
+        # Long session = user ran hooks and exited; don't retry.
+        if elapsed > 12:
+            return code
+
+    _print_attach_failure_help(package, serial, config)
+    return last_code
+
+
 def run_bypass(
     config: dict,
     recipe_id: RecipeId,
@@ -393,7 +526,7 @@ def run_bypass(
     if chosen == "frida" and not _tool_ready(config, "frida", "frida"):
         raise BypassError("Frida not installed. Run: droidforge install frida")
 
-    preflight(config, network=network)
+    preflight(config, network=network, serial=serial)
 
     if foremost:
         target = resolve_android_target(
@@ -421,19 +554,58 @@ def run_bypass(
             network=network,
             foremost=foremost,
         )
-    else:
-        argv = build_frida_argv(
-            config,
-            recipe,
-            target,
-            serial=serial,
-            network=network,
-            foremost=foremost,
-        )
+        console.print(f"[dim]Running:[/] {' '.join(argv)}\n")
+        try:
+            return subprocess.run(argv, env=env).returncode
+        except FileNotFoundError as e:
+            raise BypassError(f"Executable not found: {e}") from e
+
+    argv = build_frida_argv(
+        config,
+        recipe,
+        target,
+        serial=serial,
+        network=network,
+        foremost=foremost,
+    )
+
+    if target.spawn and not foremost:
+        try:
+            force_stop_app(config, target.identifier, serial=serial)
+            console.print(
+                f"[dim]Force-stopped[/] [bold]{target.identifier}[/] [dim]before spawn.[/]"
+            )
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[yellow]Warning:[/] could not force-stop app: {e}")
 
     console.print(f"[dim]Running:[/] {' '.join(argv)}\n")
+
     try:
-        return subprocess.run(argv, env=env).returncode
+        if target.spawn and not foremost:
+            code, elapsed = _run_frida_session(argv, env)
+            if code == 0:
+                return code
+            # Immediate exit usually means spawn failed before hooks could run.
+            if elapsed < 15:
+                attach_code = _attempt_attach_after_spawn_failure(
+                    config,
+                    recipe,
+                    target.identifier,
+                    serial=serial,
+                    network=network,
+                )
+                if attach_code is not None and attach_code == 0:
+                    return attach_code
+                if attach_code is None:
+                    _print_spawn_failure_help(target.identifier, serial)
+                return attach_code if attach_code is not None else code
+            return code
+        code, elapsed = _run_frida_session(argv, env)
+        if code != 0 and elapsed < 15:
+            print_frida_attach_troubleshooting(
+                config, serial=serial, package=target.identifier
+            )
+        return code
     except FileNotFoundError as e:
         raise BypassError(f"Executable not found: {e}") from e
 

@@ -19,6 +19,7 @@ from droidforge.registry import get_pin_group, get_pin_group_leader, get_tool
 
 DEFAULT_CONFIG_NAME = "droidforge.toml"
 DEFAULT_TEMPLATE = "droidforge.toml.default"
+META_KEY = "_meta"
 
 
 def _package_root() -> Path:
@@ -26,12 +27,15 @@ def _package_root() -> Path:
 
 
 def default_config_path() -> Path:
-    """Project-local or user config path."""
-    local = Path.cwd() / DEFAULT_CONFIG_NAME
-    if local.exists():
-        return local
-    user = Path.home() / ".droidforge" / DEFAULT_CONFIG_NAME
-    return user
+    """Project-local (searching up to the repo root) or user config path."""
+    cwd = Path.cwd()
+    for d in (cwd, *cwd.parents):
+        candidate = d / DEFAULT_CONFIG_NAME
+        if candidate.exists():
+            return candidate
+        if (d / ".git").exists():
+            break
+    return Path.home() / ".droidforge" / DEFAULT_CONFIG_NAME
 
 
 def ensure_config(path: Path | None = None) -> Path:
@@ -61,10 +65,14 @@ def ensure_config(path: Path | None = None) -> Path:
 def load_config(path: Path | None = None) -> dict[str, Any]:
     cfg_path = ensure_config(path) if path is None else path
     if not cfg_path.exists():
-        return _empty_config()
+        cfg = _empty_config()
+        cfg[META_KEY] = {"root": str(cfg_path.parent), "path": str(cfg_path)}
+        return cfg
     with cfg_path.open("rb") as f:
         data = tomllib.load(f)
-    return _normalize_config(data)
+    cfg = _normalize_config(data)
+    cfg[META_KEY] = {"root": str(cfg_path.parent), "path": str(cfg_path)}
+    return cfg
 
 
 def _empty_config() -> dict[str, Any]:
@@ -92,11 +100,18 @@ def _normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _strip_meta(data: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in data.items() if k != META_KEY}
+
+
 def save_config(data: dict[str, Any], path: Path | None = None) -> Path:
-    cfg_path = path or default_config_path()
+    if path is None:
+        meta = data.get(META_KEY, {})
+        path = Path(meta["path"]) if meta.get("path") else default_config_path()
+    cfg_path = path
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     with cfg_path.open("wb") as f:
-        tomli_w.dump(data, f)
+        tomli_w.dump(_strip_meta(data), f)
     return cfg_path
 
 
@@ -104,9 +119,35 @@ def get_setting(config: dict[str, Any], key: str, default: Any = None) -> Any:
     return config.get("settings", {}).get(key, default)
 
 
+def config_root(config: dict[str, Any]) -> Path:
+    """Directory the config file lives in — base for repo-local relative paths."""
+    meta = config.get(META_KEY, {})
+    root = meta.get("root")
+    if root:
+        return Path(root)
+    return Path.home() / ".droidforge"
+
+
+def config_path_of(config: dict[str, Any]) -> Path:
+    meta = config.get(META_KEY, {})
+    if meta.get("path"):
+        return Path(meta["path"])
+    return default_config_path()
+
+
+def is_project_config(config: dict[str, Any]) -> bool:
+    """True when the active config is repo-local (not the home fallback)."""
+    return config_root(config) != (Path.home() / ".droidforge")
+
+
 def expand_path(config: dict[str, Any], key: str) -> Path:
-    raw = get_setting(config, key, "")
-    return Path(os.path.expanduser(str(raw))).resolve()
+    raw = str(get_setting(config, key, "") or "")
+    expanded = os.path.expanduser(raw)
+    p = Path(expanded)
+    if p.is_absolute():
+        return p.resolve()
+    # Relative paths resolve against the config's directory (repo-local layout).
+    return (config_root(config) / p).resolve()
 
 
 def install_dir(config: dict[str, Any]) -> Path:
@@ -175,5 +216,5 @@ def format_config_toml(config: dict[str, Any]) -> str:
     import io
 
     buf = io.BytesIO()
-    tomli_w.dump(config, buf)
+    tomli_w.dump(_strip_meta(config), buf)
     return buf.getvalue().decode("utf-8")

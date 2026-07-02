@@ -14,7 +14,7 @@ from rich.table import Table
 
 from droidforge.config import get_pinned_version, pin_tool, save_config
 from droidforge.registry import FRIDA_PIN_GROUP, get_pin_group, get_tool
-from droidforge.utils import compare_versions, detect_platform, parse_version, run_cmd, versions_match
+from droidforge.utils import compare_versions, detect_platform, fetch_pypi_latest_version, parse_version, pypi_version_exists, run_cmd, versions_match
 
 console = Console()
 
@@ -81,6 +81,26 @@ def get_active_frida_version(config: dict) -> str | None:
     return get_pinned_version(config, "frida")
 
 
+def get_usable_frida_version(config: dict) -> str | None:
+    """Active/pinned frida only when the venv exists and the version is on PyPI."""
+    ver = get_active_frida_version(config)
+    if ver and frida_runtime_ready(ver):
+        return ver
+    return None
+
+
+def frida_runtime_ready(version: str) -> bool:
+    """True when the version exists on PyPI and its venv has a frida CLI."""
+    ver = version.lstrip("v")
+    if not pypi_version_exists("frida", ver):
+        return False
+    bindir = _venv_bin_dir(frida_venv_path(ver))
+    for name in ("frida", "frida.exe", "frida.cmd", "frida.bat"):
+        if (bindir / name).is_file():
+            return True
+    return False
+
+
 def set_active_frida_version(config: dict, version: str) -> dict:
     import copy
 
@@ -113,13 +133,27 @@ def fetch_frida_pypi_versions(limit: int = 15) -> list[str]:
 
 def resolve_frida_target(config: dict, explicit: str | None = None) -> str:
     if explicit and explicit.lower() != "latest":
-        return explicit.lstrip("v")
+        target = explicit.lstrip("v")
+        if not pypi_version_exists("frida", target):
+            latest = fetch_pypi_latest_version("frida")
+            hint = f" Latest on PyPI: {latest}." if latest else ""
+            raise PinGroupSyncError(
+                f"Frida {target} is not published on PyPI.{hint}\n"
+                "Run: droidforge use latest",
+                target_frida=target,
+            )
+        return target
+
     pinned = get_pinned_version(config, "frida")
     if pinned:
-        return pinned.lstrip("v")
-    from droidforge.installer import get_latest_version
+        pinned = pinned.lstrip("v")
+        if pypi_version_exists("frida", pinned):
+            return pinned
+        console.print(
+            f"[yellow]Pinned frida {pinned} is not on PyPI — using latest instead.[/]"
+        )
 
-    latest = get_latest_version(get_tool("frida"))
+    latest = fetch_pypi_latest_version("frida")
     if not latest:
         raise PinGroupSyncError(
             "Could not determine target frida version from PyPI.",
@@ -144,6 +178,18 @@ def _pip_in_venv(venv: Path, *args: str) -> None:
 
 def ensure_frida_venv(frida_version: str, *, force: bool = False) -> Path:
     """Create venv and install frida stack (nvm-style isolated environment)."""
+    frida_version = frida_version.lstrip("v")
+    if not pypi_version_exists("frida", frida_version):
+        latest = fetch_pypi_latest_version("frida")
+        hint = f" Latest on PyPI: {latest}." if latest else ""
+        raise PinGroupSyncError(
+            f"Frida {frida_version} is not published on PyPI.{hint}\n"
+            "Run: droidforge use latest\n"
+            "If this persists, clear stale cache: delete %USERPROFILE%\\.droidforge\\cache "
+            "(or ~/.droidforge/cache on Unix).",
+            target_frida=frida_version,
+        )
+
     venv = frida_venv_path(frida_version)
     venvs_root().mkdir(parents=True, exist_ok=True)
 

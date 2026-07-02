@@ -12,10 +12,19 @@ from rich.panel import Panel
 from droidforge.banner import doctor_table
 from droidforge.config import get_pinned_version
 from droidforge.progress import work_progress
-from droidforge.device import check_frida_server_running, get_local_frida_version, list_devices
-from droidforge.installer import get_tool_version
+from droidforge.device import check_frida_server_running, frida_server_status, get_local_frida_version, list_devices
+from droidforge.config import install_dir
+from droidforge.installer import get_tool_version, warm_version_cache
 from droidforge.registry import FRIDA_PIN_GROUP, TOOLS, get_tool
-from droidforge.utils import parse_version, run_cmd, versions_match, which
+from droidforge.runtime import _find_binary_in_dir, collect_tool_bin_paths
+from droidforge.utils import (
+    PROBE_CMD_TIMEOUT,
+    normalize_pkg_name,
+    parse_version,
+    run_cmd,
+    versions_match,
+    which,
+)
 
 console = Console()
 
@@ -52,7 +61,7 @@ def check_java() -> CheckResult:
             "Install JDK 11+ and set java_path in droidforge.toml",
             automated=False,
         )
-    result = run_cmd("java -version")
+    result = run_cmd("java -version", timeout=PROBE_CMD_TIMEOUT)
     combined = (result.stderr or "") + (result.stdout or "")
     ver = parse_version(combined)
     return CheckResult("Java", "ok", ver or combined.strip().split("\n")[0])
@@ -91,7 +100,7 @@ def check_nodejs() -> CheckResult:
             "Install Node.js from https://nodejs.org/",
             automated=False,
         )
-    result = run_cmd("node --version")
+    result = run_cmd("node --version", timeout=PROBE_CMD_TIMEOUT)
     ver = parse_version(result.stdout or "")
     return CheckResult("Node.js", "ok", ver or (result.stdout or "").strip())
 
@@ -101,7 +110,7 @@ def check_frida_pin_group(config: dict) -> CheckResult:
     from droidforge.versions import FRIDA_COMPANIONS, FRIDA_EXACT
 
     frida_tool = get_tool("frida")
-    frida_ver = get_tool_version(frida_tool)
+    frida_ver = get_tool_version(frida_tool, config)
 
     if not frida_ver:
         return CheckResult(
@@ -121,7 +130,7 @@ def check_frida_pin_group(config: dict) -> CheckResult:
                 continue
             continue
         tool = get_tool(name)
-        ver = get_tool_version(tool)
+        ver = get_tool_version(tool, config)
         if ver:
             parts.append(f"{name}={ver}")
         else:
@@ -185,8 +194,24 @@ def check_frida_server_match(config: dict) -> CheckResult:
             "droidforge push-server",
         )
 
+    status = frida_server_status(config, devices[0])
+    if status.device_rooted and not status.runs_as_root:
+        return CheckResult(
+            "Frida server",
+            "warn",
+            f"Running as {status.user or 'non-root'} — attach to apps will fail",
+            "droidforge push-server",
+        )
+    if not status.device_rooted:
+        return CheckResult(
+            "Frida server",
+            "warn",
+            "Device not rooted — Frida attach to third-party apps usually fails",
+            "Use a rooted device/emulator or frida-gadget",
+        )
+
     # Best-effort: if frida-ps works, versions likely match
-    result = run_cmd("frida-ps -U")
+    result = run_cmd("frida-ps -U", timeout=PROBE_CMD_TIMEOUT)
     if result.returncode == 0:
         return CheckResult(
             "Frida server",
@@ -201,25 +226,66 @@ def check_frida_server_match(config: dict) -> CheckResult:
     )
 
 
+def _binary_resolvable(binary_name: str, managed_bins: list) -> bool:
+    if which(binary_name):
+        return True
+    for bin_dir in managed_bins:
+        if _find_binary_in_dir(bin_dir, binary_name):
+            return True
+    return False
+
+
+def _tool_installed_fast(tool, config: dict, pip_versions: dict[str, str]) -> tuple[bool, str | None]:
+    if tool.install_method == "pip" and tool.pip_package:
+        ver = pip_versions.get(normalize_pkg_name(tool.pip_package))
+        return ver is not None, ver
+
+    if tool.install_method == "npm" and tool.npm_package:
+        inst = install_dir(config) / tool.name
+        if inst.is_dir() and any(inst.iterdir()):
+            return True, None
+
+    if tool.install_method in ("github_release", "git", "apt", "brew"):
+        inst_bin = install_dir(config) / tool.name / "bin"
+        if inst_bin.is_dir() and any(inst_bin.iterdir()):
+            return True, None
+
+    if tool.binary_name and which(tool.binary_name):
+        return True, None
+
+    return False, None
+
+
 def check_broken_installs(config: dict) -> list[CheckResult]:
+    from droidforge.installer import _merged_pip_versions
+
     results: list[CheckResult] = []
+    pip_versions = _merged_pip_versions(config)
+    managed_bins = collect_tool_bin_paths(config)
+
     for name, tool in TOOLS.items():
-        if tool.install_method == "manual":
+        if tool.install_method == "manual" or not tool.binary_name:
             continue
-        installed = get_tool_version(tool)
+
+        installed, version = _tool_installed_fast(tool, config, pip_versions)
         if not installed:
             continue
-        if tool.binary_name and not which(tool.binary_name):
-            results.append(
-                CheckResult(
-                    tool.display_name,
-                    "warn",
-                    f"Registered version {installed} but binary '{tool.binary_name}' not in PATH",
-                    f"Add install_dir/bin to PATH or reinstall: droidforge install {name}",
-                    fix_tool=name,
-                    automated=True,
-                )
+
+        if _binary_resolvable(tool.binary_name, managed_bins):
+            continue
+
+        label = version or "present"
+        results.append(
+            CheckResult(
+                tool.display_name,
+                "warn",
+                f"Installed ({label}) but '{tool.binary_name}' is not on your PATH",
+                "Use 'droidforge shell' (ready PATH) or 'droidforge env' to print PATH setup; "
+                f"or reinstall: droidforge install {name}",
+                fix_tool=name,
+                automated=True,
             )
+        )
     return results
 
 
@@ -234,6 +300,7 @@ def run_doctor(config: dict) -> list[CheckResult]:
     ]
 
     checks: list[CheckResult] = []
+    warm_version_cache(config)
     with work_progress(
         "[cyan]Running health checks…[/]",
         total=len(steps) + 1,
@@ -284,6 +351,16 @@ def print_doctor_report(config: dict) -> int:
                 border_style="#3a6652",
                 padding=(1, 2),
             )
+        )
+
+    path_warnings = [
+        c for c in checks if c.status == "warn" and "not on your PATH" in c.message
+    ]
+    if path_warnings:
+        console.print(
+            "\n[dim]Tip:[/] tools are installed but not on PATH — run "
+            "[cyan]droidforge shell[/] for a ready environment, or "
+            "[cyan]droidforge env[/] to print PATH setup."
         )
 
     if failures:

@@ -12,12 +12,25 @@ from droidforge.utils import human_category
 # Core commands in display order (not tool dispatchers).
 CORE_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
+        "Get started",
+        (
+            "init",
+            "up",
+            "console",
+            "shell",
+            "profile",
+            "lock",
+            "restore",
+        ),
+    ),
+    (
         "Environment",
         (
             "status",
             "doctor",
             "fix",
             "install",
+            "get",
             "update",
             "sync",
             "use",
@@ -25,6 +38,12 @@ CORE_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "env",
             "pin",
             "unpin",
+        ),
+    ),
+    (
+        "Device",
+        (
+            "device",
             "push-server",
         ),
     ),

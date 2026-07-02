@@ -2,16 +2,31 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 
+
+def _harden_stdio() -> None:
+    """Avoid UnicodeEncodeError when stdout is piped on legacy Windows consoles."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):
+            pass
+
+
+_harden_stdio()
+
 from droidforge import __version__
 from droidforge.banner import info_panel, print_banner, status_table
 from droidforge.bypass import BypassError, list_recipes, run_bypass
 from droidforge.config import (
+    config_path_of,
     default_config_path,
     ensure_config,
     format_config_toml,
@@ -23,6 +38,7 @@ from droidforge.config import (
 )
 from droidforge.device import push_frida_server
 from droidforge.doctor import print_doctor_report
+from droidforge.fix import run_fix
 from droidforge.help_fmt import DroidForgeGroup
 from droidforge.installer import (
     InstallError,
@@ -30,9 +46,17 @@ from droidforge.installer import (
     get_tool_status,
     get_tool_version,
     install_tools,
+    warm_version_cache,
     sync_pin_group,
     update_pin_group,
     update_tool,
+)
+from droidforge.lockfile import lock_path, read_lock, restore_from_lock, write_lock
+from droidforge.profiles import (
+    DEFAULT_PROFILE,
+    profile_description,
+    profile_names,
+    resolve_profile,
 )
 from droidforge.registry import (
     FRIDA_PIN_GROUP,
@@ -45,20 +69,28 @@ from droidforge.registry import (
 from droidforge.progress import work_progress, work_spinner
 from droidforge.runtime import (
     RunError,
+    can_launch_interactive_shell,
+    collect_tool_bin_paths,
     format_arsenal_row,
+    launch_shell,
     list_runnable_tools,
     lookup_invocation,
+    pick_user_shell,
     run_invocation,
+    shell_path_hint,
 )
 from droidforge.utils import human_category
 from droidforge.versions import (
     PinGroupSyncError,
     env_shell_hint,
+    get_active_frida_version,
+    get_usable_frida_version,
     print_sync_error,
     print_versions_report,
     resolve_frida_target,
     use_frida_version,
 )
+from droidforge.workspace import find_git_root, init_workspace
 
 console = Console()
 
@@ -148,11 +180,17 @@ def main(ctx: click.Context, no_banner: bool) -> None:
 
 @main.command()
 @click.option("--category", "-c", default=None, help="Filter by category")
-def status(category: str | None) -> None:
+@click.option(
+    "--offline",
+    is_flag=True,
+    help="Skip latest-version lookups (no network; much faster)",
+)
+def status(category: str | None, offline: bool) -> None:
     """Show installed vs latest versions for all tools."""
     print_banner(console, compact=True)
     cfg = _load_cfg()
     tools = list_tools(category)
+    warm_version_cache(cfg)
 
     table = status_table("DroidForge Tool Status")
 
@@ -164,44 +202,56 @@ def status(category: str | None) -> None:
         "manual": "[dim cyan]▤ MANUAL[/]",
     }
 
-    rows: list[tuple] = []
+    rows: list[tuple | None] = [None] * len(tools)
+    fetch_latest = not offline
+
+    def _scan_tool(index: int, tool) -> tuple[int, tuple]:
+        info = get_tool_status(tool, cfg, fetch_latest=fetch_latest)
+        icon = status_icons.get(info["status"], info["status"])
+        return index, (
+            tool.display_name,
+            human_category(tool.category),
+            info["installed"] or "—",
+            info["latest"] or "—",
+            icon,
+        )
+
     with work_progress(
         "[cyan]Scanning tool registry…[/]",
         total=len(tools),
         console=console,
     ) as (update, advance):
-        for tool in tools:
-            update(f"[cyan]Checking[/] [bold]{tool.display_name}[/]…")
-            info = get_tool_status(tool, cfg)
-            icon = status_icons.get(info["status"], info["status"])
-            rows.append(
-                (
-                    tool.display_name,
-                    human_category(tool.category),
-                    info["installed"] or "—",
-                    info["latest"] or "—",
-                    icon,
-                )
-            )
-            advance()
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(_scan_tool, i, tool) for i, tool in enumerate(tools)]
+            for future in as_completed(futures):
+                index, row = future.result()
+                update(f"[cyan]Checking[/] [bold]{row[0]}[/]…")
+                rows[index] = row
+                advance()
 
     for row in rows:
-        table.add_row(*row)
+        if row is not None:
+            table.add_row(*row)
 
     console.print(table)
+    if offline:
+        console.print(
+            "[dim]Offline mode — latest versions skipped. "
+            "Re-run without --offline to check for updates.[/]"
+        )
 
     # Frida pin group summary
     from droidforge.config import get_pinned_version
     from droidforge.versions import FRIDA_COMPANIONS, get_active_frida_version
 
-    frida_ver = get_tool_version(get_tool("frida"))
+    frida_ver = get_tool_version(get_tool("frida"), cfg)
     active = get_active_frida_version(cfg)
     pinned = get_pinned_version(cfg, "frida")
 
     if frida_ver:
         parts = [f"frida={frida_ver}"]
         for name in FRIDA_COMPANIONS:
-            v = get_tool_version(get_tool(name))
+            v = get_tool_version(get_tool(name), cfg)
             if v:
                 parts.append(f"{name}={v}")
         line = ", ".join(parts)
@@ -467,10 +517,75 @@ def versions_cmd(tool: str) -> None:
 
 
 @main.command("env")
-def env_cmd() -> None:
-    """Print shell commands to activate the current frida venv."""
+@click.option("--frida-only", is_flag=True, help="Only the active frida venv (legacy)")
+def env_cmd(frida_only: bool) -> None:
+    """Print shell commands to put all DroidForge tools on PATH."""
     cfg = _load_cfg()
-    console.print(Panel(env_shell_hint(cfg), title="DroidForge environment", border_style="#3a6652"))
+    hint = env_shell_hint(cfg) if frida_only else shell_path_hint(cfg)
+    console.print(Panel(hint, title="DroidForge environment", border_style="#3a6652"))
+
+
+@main.command("shell")
+def shell_cmd() -> None:
+    """Open a subshell with every installed tool already on PATH."""
+    cfg = _load_cfg()
+    paths = collect_tool_bin_paths(cfg)
+    if not paths:
+        console.print(
+            "[yellow]No tools installed yet.[/] Run [cyan]droidforge up[/] first."
+        )
+        sys.exit(1)
+
+    if not can_launch_interactive_shell():
+        # No real TTY (piped/redirected/non-interactive runner). An interactive
+        # subshell would exit immediately, so guide the user instead.
+        console.print(
+            "[yellow]No interactive terminal detected[/] - can't open a subshell here."
+        )
+        console.print(
+            "Run this in a normal terminal, or add the tools to your current "
+            "session with:\n"
+        )
+        console.print(shell_path_hint(cfg))
+        sys.exit(1)
+
+    shell_argv = pick_user_shell()
+    shell_name = os.path.basename(shell_argv[0])
+    console.print(
+        Panel(
+            "Tools on PATH for this session:\n"
+            + "\n".join(f"  [green]•[/] {p}" for p in paths)
+            + f"\n\n[dim]Launching[/] [cyan]{shell_name}[/] "
+            + "[dim]- look for the[/] [green][DroidForge][/] [dim]prompt.[/]\n"
+            + "[dim]Type[/] [cyan]exit[/] [dim]to leave the DroidForge shell.[/]",
+            title="[bold #00ff41]⚔ DroidForge shell[/]",
+            border_style="#00ff41",
+        )
+    )
+    code = launch_shell(cfg)
+    sys.exit(code)
+
+
+@main.command("console")
+@click.option("--device", "-d", "serial", default=None, help="ADB device serial to target")
+def console_cmd(serial: str | None) -> None:
+    """Interactive pentest console (REPL) for a connected device.
+
+    A DroidForge shell with first-class verbs: devices, apps, target,
+    ready, hook/bypass, objection, proxy, logcat, screenshot, adb, run…
+
+    \b
+    Example:
+      droidforge console
+      droidforge> devices
+      droidforge> target com.example.app
+      droidforge> ready
+      droidforge> hook
+    """
+    from droidforge.console import run_console
+
+    cfg = _load_cfg()
+    sys.exit(run_console(cfg, serial=serial))
 
 
 @main.command(
@@ -556,6 +671,7 @@ def _bypass_options(func):
     )(func)
     func = click.option(
         "-s",
+        "-f",
         "--spawn",
         is_flag=True,
         help="Spawn the app (cold start). Auto-used if the app is not running.",
@@ -960,7 +1076,7 @@ def info_cmd(tool: str | None, category: str | None) -> None:
 
     t = get_tool(resolved)
     cfg = _load_cfg()
-    installed = get_tool_version(t)
+    installed = get_tool_version(t, cfg)
     with work_spinner(f"[cyan]Fetching release info for[/] [bold]{resolved}[/]…", console=console):
         latest = get_latest_version(t)
     pinned = cfg.get("pins", {}).get("frida") if t.pin_with else cfg.get("pins", {}).get(t.name)
@@ -1025,6 +1141,438 @@ def config_set(key: str, value: str) -> None:
 def config_path_cmd() -> None:
     """Print config file path."""
     console.print(str(default_config_path()))
+
+
+@main.command("init")
+@click.option(
+    "--profile",
+    "-p",
+    default=DEFAULT_PROFILE,
+    type=click.Choice(profile_names()),
+    help="Default environment profile to record in config",
+)
+@click.option("--force", is_flag=True, help="Overwrite an existing droidforge.toml")
+@click.option("--dir", "target", default=None, help="Workspace directory (default: git root or cwd)")
+def init_cmd(profile: str, force: bool, target: str | None) -> None:
+    """Set up a repo-local DroidForge workspace (config + .gitignore + tools dir)."""
+    from pathlib import Path
+
+    print_banner(console, compact=True)
+    target_dir = Path(target).resolve() if target else None
+    result = init_workspace(target_dir, profile=profile, force=force)
+
+    lines = []
+    if result.created_config:
+        lines.append(f"[green]✓[/] Created config: [bold]{result.config_path}[/]")
+    else:
+        lines.append(f"[dim]Config already exists:[/] {result.config_path}")
+    lines.append(f"[green]✓[/] Tools directory: [bold]{result.tools_dir}[/]")
+    if result.gitignore_added:
+        lines.append(
+            f"[green]✓[/] Updated .gitignore (+{len(result.gitignore_added)}): "
+            + ", ".join(result.gitignore_added)
+        )
+    else:
+        lines.append("[dim].gitignore already covers .droidforge/[/]")
+    lines.append(f"[dim]Default profile:[/] [cyan]{result.profile}[/]")
+
+    console.print(Panel("\n".join(lines), title="[bold]Workspace ready[/]", border_style="#00ff41"))
+    console.print(
+        "\nNext: [cyan]droidforge up[/]  (install the profile + frida)  ·  "
+        "[cyan]droidforge shell[/]  (enter a ready environment)"
+    )
+
+
+def _setup_frida(cfg: dict, version: str | None) -> str | None:
+    """Create/select the frida venv; returns active version or None on failure."""
+    try:
+        target = version or "latest"
+        with work_spinner(f"[cyan]Setting up frida runtime ({target})…[/]", console=console):
+            use_frida_version(cfg, target, pin=True)
+    except PinGroupSyncError as e:
+        console.print(f"[yellow]Frida setup skipped:[/] {e}")
+        return None
+    return get_active_frida_version(load_config(config_path_of(cfg)))
+
+
+@main.command("up")
+@click.option(
+    "--profile",
+    "-p",
+    default=None,
+    type=click.Choice(profile_names()),
+    help="Profile to install (default: config profile or 'dynamic')",
+)
+@click.option("--frida-version", default=None, help="Frida runtime version (default: pinned/latest)")
+@click.option("--no-frida", is_flag=True, help="Skip frida venv setup")
+@click.option("--yes", "-y", is_flag=True, help="Run non-interactively (CI/headless)")
+@click.option("--no-lock", is_flag=True, help="Do not write droidforge.lock.toml")
+def up_cmd(
+    profile: str | None,
+    frida_version: str | None,
+    no_frida: bool,
+    yes: bool,
+    no_lock: bool,
+) -> None:
+    """One command to build the environment: install a profile, set up frida, ready PATH."""
+    print_banner(console, compact=True)
+
+    # Auto-init a repo-local workspace when inside a git repo with no config yet.
+    git_root = find_git_root()
+    if git_root and not (git_root / "droidforge.toml").exists():
+        result = init_workspace(git_root, profile=profile or DEFAULT_PROFILE)
+        if result.created_config:
+            console.print(f"[green]✓[/] Initialized workspace at [bold]{result.config_path}[/]")
+
+    cfg = _load_cfg()
+    chosen = profile or cfg.get("settings", {}).get("profile") or DEFAULT_PROFILE
+    try:
+        tools = resolve_profile(chosen)
+    except KeyError:
+        console.print(f"[red]Unknown profile:[/] {chosen}")
+        sys.exit(1)
+
+    ignored = set(cfg.get("ignored", {}).get("tools", []))
+    tools = [t for t in tools if t not in ignored]
+
+    # Frida stack pip members come from the venv; don't double-install globally.
+    if not no_frida:
+        install_list = [
+            t
+            for t in tools
+            if not (t in FRIDA_PIN_GROUP and get_tool(t).install_method == "pip")
+        ]
+    else:
+        install_list = tools
+
+    console.print(
+        Panel(
+            f"Profile: [bold cyan]{chosen}[/] — {profile_description(chosen)}\n"
+            f"Tools: {', '.join(tools) if tools else '—'}\n"
+            f"Frida runtime: {'skipped' if no_frida else (frida_version or 'pinned/latest')}",
+            title="[bold]Environment plan[/]",
+            border_style="#3a6652",
+        )
+    )
+    if not yes and not click.confirm("Build this environment?", default=True):
+        console.print("[dim]Aborted.[/]")
+        return
+
+    install_failures: list[tuple[str, str]] = []
+    if install_list:
+        try:
+            install_failures = install_tools(install_list, cfg, continue_on_error=True)
+        except InstallError as e:
+            console.print(f"[red]Install error:[/] {e}")
+
+    active = None
+    if not no_frida:
+        active = _setup_frida(cfg, frida_version)
+
+    cfg = _load_cfg()
+    if not no_lock:
+        path = write_lock(cfg)
+        console.print(f"[green]✓[/] Wrote lockfile: [dim]{path}[/]")
+
+    border = "#00ff41"
+    if install_failures:
+        summary = ["[bold yellow]◈ Environment built with some failures.[/]"]
+        if active:
+            summary.append(f"  frida runtime: [bold]{active}[/]")
+        summary.append("")
+        summary.append("[yellow]Could not install:[/]")
+        for name, err in install_failures:
+            first_line = err.splitlines()[0] if err else "unknown error"
+            summary.append(f"  [red]✗[/] {name}: {first_line}")
+        summary.append("")
+        summary.append("[dim]Retry one tool:[/] [cyan]droidforge get <tool>[/]")
+        border = "#d7af00"
+    else:
+        summary = ["[bold green]◈ Environment ready.[/]"]
+        if active:
+            summary.append(f"  frida runtime: [bold]{active}[/]")
+    console.print(Panel("\n".join(summary), border_style=border))
+    console.print(
+        "\nUse your tools:\n"
+        "  [cyan]droidforge shell[/]            enter a subshell with everything on PATH\n"
+        "  [cyan]droidforge env[/]              print PATH setup for your shell\n"
+        "  [cyan]droidforge device ready[/]     push frida-server to a connected device\n"
+        "  [cyan]droidforge status --offline[/] see what's installed"
+    )
+
+
+@main.group("profile", invoke_without_command=True)
+@click.pass_context
+def profile_group(ctx: click.Context) -> None:
+    """List or inspect environment profiles."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(profile_list)
+
+
+@profile_group.command("list")
+def profile_list() -> None:
+    """Show available environment profiles."""
+    from rich.table import Table
+
+    table = Table(
+        title="[bold cyan]DroidForge Profiles[/]",
+        header_style="bold #00ff41",
+        border_style="#3a6652",
+    )
+    table.add_column("Profile", style="bold #39ff14")
+    table.add_column("Tools", justify="right")
+    table.add_column("Description")
+    for name in profile_names():
+        tools = resolve_profile(name)
+        table.add_row(name, str(len(tools)), profile_description(name))
+    console.print(table)
+    console.print("\nBuild one: [cyan]droidforge up --profile dynamic[/]")
+
+
+@profile_group.command("show")
+@click.argument("name", type=click.Choice(profile_names()))
+def profile_show(name: str) -> None:
+    """Show the tools in a profile and whether they're installed."""
+    from rich.table import Table
+
+    cfg = _load_cfg()
+    warm_version_cache(cfg)
+    tools = resolve_profile(name)
+    table = Table(
+        title=f"[bold cyan]Profile: {name}[/] — {profile_description(name)}",
+        header_style="bold #00ff41",
+        border_style="#3a6652",
+    )
+    table.add_column("Tool", style="bold #39ff14")
+    table.add_column("Category")
+    table.add_column("Installed")
+    for tool_name in tools:
+        t = get_tool(tool_name)
+        ver = get_tool_version(t, cfg)
+        installed = f"[green]{ver}[/]" if ver else "[red]—[/]"
+        table.add_row(tool_name, human_category(t.category), installed)
+    console.print(table)
+
+
+@main.command("lock")
+def lock_cmd() -> None:
+    """Write droidforge.lock.toml capturing the current installed kit."""
+    cfg = _load_cfg()
+    warm_version_cache(cfg)
+    path = write_lock(cfg)
+    console.print(f"[green]✓[/] Lockfile written: [bold]{path}[/]")
+    console.print("[dim]Commit it so teammates can reproduce with[/] [cyan]droidforge restore[/]")
+
+
+@main.command("restore")
+@click.option("--yes", "-y", is_flag=True, help="Run non-interactively")
+def restore_cmd(yes: bool) -> None:
+    """Install tools/frida exactly as recorded in droidforge.lock.toml."""
+    print_banner(console, compact=True)
+    cfg = _load_cfg()
+    lock = read_lock(cfg)
+    if not lock:
+        console.print(
+            f"[yellow]No lockfile found at[/] {lock_path(cfg)}\n"
+            "Create one with: [cyan]droidforge lock[/]"
+        )
+        sys.exit(1)
+
+    tools = lock.get("tools", {})
+    frida = (lock.get("frida") or {}).get("active")
+    console.print(
+        Panel(
+            f"Tools: {', '.join(tools) if tools else '—'}\n"
+            f"Frida runtime: {frida or '—'}",
+            title="[bold]Restore from lockfile[/]",
+            border_style="#3a6652",
+        )
+    )
+    if not yes and not click.confirm("Restore this environment?", default=True):
+        console.print("[dim]Aborted.[/]")
+        return
+
+    restored, failures = restore_from_lock(cfg, lock)
+    for name in restored:
+        console.print(f"[green]✓[/] {name}")
+    for name, err in failures:
+        console.print(f"[red]✗[/] {name}: {err}")
+    if failures:
+        sys.exit(1)
+    console.print("\n[bold green]◈ Environment restored.[/] Enter it: [cyan]droidforge shell[/]")
+
+
+@main.command("get")
+@click.argument("tool")
+@click.option("--version", "ver", default=None, help="Pin version for this install")
+@click.option("--force", is_flag=True, help="Reinstall / override pin group conflicts")
+def get_cmd(tool: str, ver: str | None, force: bool) -> None:
+    """Download a tool, put it on PATH, and verify it's runnable (alias of install)."""
+    print_banner(console, compact=True)
+    resolved = _resolve_tool_name(tool)
+    if resolved is None:
+        console.print(f"[red]Unknown tool:[/] {tool}")
+        suggestions = _suggest_tools(tool)
+        if suggestions:
+            console.print("[dim]Did you mean:[/] " + ", ".join(f"[cyan]{s}[/]" for s in suggestions))
+        sys.exit(1)
+
+    cfg = _load_cfg()
+    order = resolve_install_order([resolved])
+    console.print(f"Install order: {' → '.join(order)}")
+    try:
+        install_tools([resolved], cfg, version=ver, force=force)
+    except InstallError as e:
+        console.print(f"[red]Error:[/] {e}")
+        sys.exit(1)
+
+    # Verify the tool is now resolvable on the DroidForge PATH.
+    inv = lookup_invocation(resolved) or lookup_invocation(get_tool(resolved).binary_name or "")
+    if inv:
+        _, _, status = format_arsenal_row(inv, _load_cfg())
+        if "ready" in status:
+            console.print(f"[green]✓[/] [bold]{resolved}[/] is ready. Run it: [cyan]droidforge {inv.name}[/]")
+        else:
+            console.print(
+                f"[yellow]Installed, but '{resolved}' isn't on PATH yet.[/]\n"
+                "Enter a ready shell: [cyan]droidforge shell[/]  ·  or print PATH: [cyan]droidforge env[/]"
+            )
+    if read_lock(cfg) is not None:
+        write_lock(_load_cfg())
+
+
+@main.group("device", invoke_without_command=True)
+@click.pass_context
+def device_group(ctx: click.Context) -> None:
+    """Device helpers — list devices, get frida-ready."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(device_list)
+
+
+@device_group.command("list")
+def device_list() -> None:
+    """List connected ADB devices."""
+    from droidforge.device import DeviceError, list_devices
+
+    cfg = _load_cfg()
+    try:
+        devices = list_devices(cfg)
+    except DeviceError as e:
+        console.print(f"[red]{e}[/]")
+        sys.exit(1)
+    if not devices:
+        console.print("[yellow]No devices connected.[/] Enable USB debugging and reconnect.")
+        return
+    console.print("[bold]Connected devices:[/]")
+    for d in devices:
+        console.print(f"  [green]•[/] {d}")
+
+
+@device_group.command("root-server")
+@click.option("--device", "-d", "serial", default=None, help="ADB device serial")
+def device_root_server(serial: str | None) -> None:
+    """Restart frida-server as root (required for attach on rooted phones)."""
+    from droidforge.device import (
+        DEFAULT_FRIDA_SERVER_PATH,
+        device_has_su,
+        frida_server_status,
+        print_frida_attach_troubleshooting,
+        restart_frida_server,
+    )
+
+    cfg = _load_cfg()
+    if not device_has_su(cfg, serial):
+        console.print(
+            "[red]adb shell su failed[/] — device does not appear rooted, or Magisk denied su.\n"
+            "Grant root to [bold]Shell[/] or [bold]ADB[/] in Magisk Superuser settings."
+        )
+        sys.exit(1)
+
+    console.print(
+        "[dim]Watch your phone — approve the Magisk/superuser prompt if it appears.[/]\n"
+    )
+    status = restart_frida_server(cfg, serial=serial, verbose=True)
+    if status.running and status.runs_as_root:
+        console.print("[bold green]◈ frida-server is running as root.[/] You can hook now.")
+        return
+
+    console.print("[red]Could not start frida-server as root.[/]")
+    print_frida_attach_troubleshooting(cfg, serial=serial)
+    console.print(
+        "\n[bold]Manual fallback[/] (run in your terminal, approve Magisk on phone):\n"
+        f"  [cyan]adb shell su -c \"pkill frida-server; {DEFAULT_FRIDA_SERVER_PATH} -D &\"[/]\n"
+        f"  [cyan]adb shell su -c \"cat /proc/$(pidof frida-server)/status | grep Uid\"[/]"
+    )
+    sys.exit(1)
+
+
+@device_group.command("ready")
+@click.option("--device", "-d", "serial", default=None, help="ADB device serial")
+@click.option("--frida-version", default=None, help="Frida runtime to ensure active")
+def device_ready(serial: str | None, frida_version: str | None) -> None:
+    """Get a device frida-ready: ensure runtime, push frida-server, verify."""
+    from droidforge.device import DeviceError, list_devices
+
+    print_banner(console, compact=True)
+    cfg = _load_cfg()
+
+    # 1) Device present?
+    try:
+        devices = list_devices(cfg)
+    except DeviceError as e:
+        console.print(f"[red]ADB error:[/] {e}")
+        sys.exit(1)
+    if not devices:
+        console.print("[red]No devices connected.[/] Plug in a device with USB debugging enabled.")
+        sys.exit(1)
+    console.print(f"[green]✓[/] Device(s): {', '.join(devices)}")
+
+    # 2) Ensure a frida runtime is active and usable.
+    active = get_usable_frida_version(cfg)
+    if not active or frida_version:
+        active = _setup_frida(cfg, frida_version)
+        cfg = _load_cfg()
+    if not active:
+        console.print(
+            "[red]Could not establish a frida runtime.[/] "
+            "Try: [cyan]droidforge use latest[/]\n"
+            "[dim]If you still see a bogus version like 9.9.9, delete[/] "
+            "[cyan]%USERPROFILE%\\.droidforge\\cache[/]"
+        )
+        sys.exit(1)
+    console.print(f"[green]✓[/] Frida runtime: [bold]{active}[/]")
+
+    # 3) Push frida-server.
+    try:
+        push_frida_server(cfg, serial=serial, start=True)
+    except Exception as e:  # noqa: BLE001 - report and exit
+        console.print(f"[red]push-server failed:[/] {e}")
+        sys.exit(1)
+
+    from droidforge.device import frida_server_status, print_frida_attach_troubleshooting
+
+    status = frida_server_status(cfg, serial)
+    if status.device_rooted and not status.runs_as_root:
+        console.print(
+            "\n[red]frida-server is running but NOT as root[/] — hooks will fail.\n"
+            "[dim]Approve the Magisk prompt on the phone, then run:[/] "
+            "[cyan]droidforge device root-server[/]"
+        )
+        print_frida_attach_troubleshooting(cfg, serial=serial)
+        sys.exit(1)
+
+    # 4) Verify with frida-ps -U.
+    try:
+        code = run_invocation("frida-ps", ["-U"], cfg, passthrough=False)
+    except RunError:
+        code = 1
+    if code == 0:
+        console.print("\n[bold green]◈ Device is frida-ready.[/] Try: [cyan]droidforge hook --foremost[/]")
+    else:
+        console.print(
+            "\n[yellow]frida-server pushed, but frida-ps -U didn't list processes.[/] "
+            "Give it a moment, then retry: [cyan]droidforge frida-ps -U[/]"
+        )
 
 
 def _register_tool_runners() -> None:

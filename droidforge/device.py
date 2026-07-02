@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -13,10 +15,11 @@ from rich.progress import Progress
 
 from droidforge.config import get_setting
 from droidforge.progress import work_spinner
-from droidforge.utils import github_headers, parse_version, run_cmd, which
+from droidforge.utils import PROBE_CMD_TIMEOUT, github_headers, parse_version, run_cmd, which
 
 console = Console()
 
+DEFAULT_FRIDA_SERVER_PATH = "/data/local/tmp/frida-server"
 # Map adb ABI names to frida-server arch suffixes
 ABI_MAP = {
     "arm64-v8a": "arm64",
@@ -31,6 +34,17 @@ class DeviceError(Exception):
     """Device operation failed."""
 
 
+@dataclass(frozen=True)
+class FridaServerStatus:
+    running: bool
+    user: str | None = None
+    device_rooted: bool = False
+
+    @property
+    def runs_as_root(self) -> bool:
+        return self.user == "root"
+
+
 def adb_path(config: dict) -> str:
     custom = get_setting(config, "adb_path", "adb")
     if which(custom):
@@ -42,9 +56,37 @@ def adb_path(config: dict) -> str:
     )
 
 
+def _adb_cmd(config: dict, serial: str | None = None) -> list[str]:
+    cmd = [adb_path(config)]
+    if serial:
+        cmd.extend(["-s", serial])
+    return cmd
+
+
+def force_stop_app(config: dict, package: str, *, serial: str | None = None) -> None:
+    """Force-stop an Android app before a Frida cold spawn."""
+    run_cmd(_adb_cmd(config, serial) + ["shell", "am", "force-stop", package])
+
+
+def launch_app(config: dict, package: str, *, serial: str | None = None) -> None:
+    """Launch an app via adb (MAIN/LAUNCHER intent)."""
+    run_cmd(
+        _adb_cmd(config, serial)
+        + [
+            "shell",
+            "monkey",
+            "-p",
+            package,
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "1",
+        ]
+    )
+
+
 def list_devices(config: dict) -> list[str]:
     adb = adb_path(config)
-    result = run_cmd([adb, "devices"])
+    result = run_cmd([adb, "devices"], timeout=PROBE_CMD_TIMEOUT)
     if result.returncode != 0:
         raise DeviceError(f"adb devices failed: {result.stderr}")
     devices: list[str] = []
@@ -78,7 +120,7 @@ def get_device_arch(config: dict, serial: str | None = None) -> str:
 
 
 def get_local_frida_version() -> str:
-    result = run_cmd("frida --version")
+    result = run_cmd("frida --version", timeout=PROBE_CMD_TIMEOUT)
     if result.returncode != 0:
         raise DeviceError(
             "frida not installed locally. Install with: droidforge install frida"
@@ -191,16 +233,26 @@ def push_frida_server(
             console.print(f"[green]✓[/] Pushed frida-server {frida_ver} ({arch}) to {remote_path}")
 
             if start:
-                # Kill existing and start in background
                 with work_spinner("[cyan]Starting frida-server on device…[/]", console=console):
-                    run_cmd(cmd_base + ["shell", f"pkill -9 frida-server 2>/dev/null; true"])
-                    start_cmd = cmd_base + [
-                        "shell",
-                        f"{remote_path} -D &",
-                    ]
-                    run_cmd(start_cmd)
-                console.print("[green]✓[/] Started frida-server on device")
-
+                    status = restart_frida_server(
+                        config, serial=dev, remote_path=remote_path
+                    )
+                if not status.running:
+                    raise DeviceError("frida-server did not start on device")
+                if status.runs_as_root:
+                    console.print("[green]✓[/] Started frida-server [bold]as root[/]")
+                elif status.device_rooted:
+                    console.print(
+                        "[yellow]⚠[/] frida-server started but [bold]not as root[/] — "
+                        "attach to apps will likely fail.\n"
+                        f"  Run: [cyan]adb -s {dev} shell su -c "
+                        f"'pkill frida-server; {remote_path} -D &'[/]"
+                    )
+                else:
+                    console.print(
+                        "[green]✓[/] Started frida-server [dim](device not rooted — "
+                        "attach may only work on debuggable apps)[/]"
+                    )
 
 def get_remote_frida_server_version(config: dict, serial: str | None = None) -> str | None:
     """Try to detect frida-server version on device via frida-ps."""
@@ -213,7 +265,7 @@ def get_remote_frida_server_version(config: dict, serial: str | None = None) -> 
     if result.returncode != 0:
         return None
     # frida-ps doesn't show server version directly; use frida CLI
-    result = run_cmd("frida --version")
+    result = run_cmd("frida --version", timeout=PROBE_CMD_TIMEOUT)
     return parse_version(result.stdout) if result.returncode == 0 else None
 
 
@@ -225,3 +277,174 @@ def check_frida_server_running(config: dict, serial: str | None = None) -> bool:
     cmd.extend(["shell", "pgrep frida-server"])
     result = run_cmd(cmd)
     return result.returncode == 0 and bool((result.stdout or "").strip())
+
+
+def device_has_su(config: dict, serial: str | None = None) -> bool:
+    """True when adb shell su can get uid 0 (device is rooted)."""
+    result = run_cmd(
+        _adb_cmd(config, serial) + ["shell", "su", "-c", "id"],
+        timeout=PROBE_CMD_TIMEOUT,
+    )
+    return result.returncode == 0 and "uid=0" in (result.stdout or "")
+
+
+def _kill_frida_server(base: list[str]) -> None:
+    run_cmd(
+        base
+        + [
+            "shell",
+            "su",
+            "-c",
+            "pkill -9 frida-server 2>/dev/null; killall frida-server 2>/dev/null; true",
+        ]
+    )
+    run_cmd(base + ["shell", "pkill -9 frida-server 2>/dev/null || true"])
+
+
+def _root_frida_start_strategies(remote_path: str) -> list[list[str]]:
+    """ADB shell argv suffixes to try when starting frida-server as root."""
+    return [
+        ["su", "-c", f"chmod 755 {remote_path}; exec {remote_path} -D &"],
+        ["su", "-c", f"nohup {remote_path} -D >/dev/null 2>&1 &"],
+        ["su", "-mm", "-c", f"{remote_path} -D &"],
+        ["su", "0", "sh", "-c", f"{remote_path} -D &"],
+        ["su", "-c", f"({remote_path} -D &) &"],
+        ["su", "-c", f"setsid {remote_path} -D &"],
+    ]
+
+
+def frida_server_pid(config: dict, serial: str | None = None) -> str | None:
+    base = _adb_cmd(config, serial)
+    for cmd in (
+        base + ["shell", "pidof frida-server"],
+        base + ["shell", "su", "-c", "pidof frida-server"],
+    ):
+        result = run_cmd(cmd, timeout=PROBE_CMD_TIMEOUT)
+        if result.returncode != 0:
+            continue
+        pid = (result.stdout or "").strip().split()
+        if pid:
+            return pid[0]
+    return None
+
+
+def frida_server_user(config: dict, serial: str | None = None) -> str | None:
+    """Return 'root' when frida-server runs as uid 0, else a uid label."""
+    pid = frida_server_pid(config, serial)
+    if not pid:
+        return None
+    base = _adb_cmd(config, serial)
+    for cmd in (
+        base + ["shell", f"cat /proc/{pid}/status"],
+        base + ["shell", "su", "-c", f"cat /proc/{pid}/status"],
+    ):
+        result = run_cmd(cmd, timeout=PROBE_CMD_TIMEOUT)
+        if result.returncode != 0:
+            continue
+        for line in (result.stdout or "").splitlines():
+            if line.startswith("Uid:"):
+                uid = line.split()[1]
+                return "root" if uid == "0" else f"uid_{uid}"
+    return None
+
+
+def frida_server_status(config: dict, serial: str | None = None) -> FridaServerStatus:
+    running = check_frida_server_running(config, serial)
+    user = frida_server_user(config, serial) if running else None
+    return FridaServerStatus(
+        running=running,
+        user=user,
+        device_rooted=device_has_su(config, serial),
+    )
+
+
+def restart_frida_server(
+    config: dict,
+    *,
+    serial: str | None = None,
+    remote_path: str = DEFAULT_FRIDA_SERVER_PATH,
+    verbose: bool = False,
+) -> FridaServerStatus:
+    """Kill any frida-server and start it (as root when su is available)."""
+    base = _adb_cmd(config, serial)
+    rooted = device_has_su(config, serial)
+
+    _kill_frida_server(base)
+
+    if not rooted:
+        run_cmd(base + ["shell", f"{remote_path} -D &"])
+        time.sleep(1.0)
+        return frida_server_status(config, serial)
+
+    for idx, strat in enumerate(_root_frida_start_strategies(remote_path), start=1):
+        if verbose:
+            console.print(f"[dim]Trying root start strategy {idx}/{len(_root_frida_start_strategies(remote_path))}…[/]")
+        run_cmd(base + ["shell"] + strat)
+        time.sleep(1.5)
+        status = frida_server_status(config, serial)
+        if status.running and status.runs_as_root:
+            return status
+        _kill_frida_server(base)
+
+    # Last resort — may only work for debuggable apps.
+    run_cmd(base + ["shell", f"{remote_path} -D &"])
+    time.sleep(1.0)
+    return frida_server_status(config, serial)
+
+
+def print_frida_attach_troubleshooting(
+    config: dict,
+    *,
+    serial: str | None = None,
+    package: str | None = None,
+) -> None:
+    """Explain common causes of 'unable to access process' attach failures."""
+    status = frida_server_status(config, serial)
+    serial_flag = f" -s {serial}" if serial else ""
+    pkg = package or "<package>"
+
+    console.print(
+        "\n[bold red]Frida attach failed[/] — [dim]unable to access process[/]\n"
+    )
+
+    if not status.running:
+        console.print("[yellow]frida-server is not running.[/]")
+        console.print(f"  [cyan]droidforge device ready{serial_flag}[/]")
+        return
+
+    if status.device_rooted and not status.runs_as_root:
+        console.print(
+            "[yellow]Device is rooted but frida-server is NOT running as root.[/]\n"
+            "This is the usual cause of [bold]unable to access process[/].\n"
+        )
+        console.print(
+            "[bold]On the phone:[/] approve the [bold]Magisk/superuser[/] prompt when starting "
+            "frida-server (set Magisk to prompt or grant permanent su to shell/adb).\n"
+        )
+        console.print("[bold]Fix — restart frida-server as root:[/]")
+        console.print(
+            f"  [cyan]droidforge device root-server{serial_flag}[/]  "
+            "[dim](tries multiple su strategies)[/]\n"
+            f"  [cyan]adb{serial_flag} shell su -c "
+            f"'pkill frida-server; {DEFAULT_FRIDA_SERVER_PATH} -D &'[/]\n"
+            "  Manual check:\n"
+            f"  [cyan]adb{serial_flag} shell su -c "
+            f"\"cat /proc/$(pidof frida-server)/status | grep Uid\"[/]  "
+            "[dim]→ must show Uid: 0[/]"
+        )
+    elif not status.device_rooted:
+        console.print(
+            "[yellow]Device does not appear rooted[/] (adb shell su failed).\n"
+            "Frida can list apps but usually [bold]cannot attach[/] on a stock phone.\n\n"
+            "[bold]Options:[/]\n"
+            "  • Rooted device with Magisk\n"
+            "  • Rooted emulator (Android Studio AVD / Genymotion)\n"
+            "  • frida-gadget patched APK (advanced)\n"
+        )
+    else:
+        console.print(
+            "[yellow]frida-server runs as root but attach still failed.[/]\n"
+            "Try opening the app first, then attach without [cyan]--spawn[/]:\n"
+            f"  [cyan]droidforge hook -n {pkg}{serial_flag}[/]\n"
+            f"  [cyan]droidforge objection -g {pkg} explore{serial_flag}[/]"
+        )

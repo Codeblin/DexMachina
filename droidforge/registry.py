@@ -28,6 +28,9 @@ class Tool:
     github_asset_pattern: str | None = None
     cli_aliases: tuple[str, ...] = ()  # extra invocations (e.g. frida-ps → frida-tools)
     run_module: str | None = None  # python -m module when no binary on PATH
+    # Direct download archive URL for install_method="direct". {platform} expands
+    # to windows/linux/darwin (see installer._platform_download_key).
+    download_url_template: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -318,12 +321,15 @@ _register(
         name="adb",
         display_name="Android Debug Bridge",
         category="device_adb",
-        install_method="github_release",
-        github_repo="platformtools/platform-tools",
+        install_method="direct",
+        download_url_template=(
+            "https://dl.google.com/android/repository/platform-tools-latest-{platform}.zip"
+        ),
         binary_name="adb",
         version_cmd="adb version",
+        cli_aliases=("fastboot",),
         description="Android platform tools (adb, fastboot)",
-        notes="Official platform-tools bundle. Also available via apt (android-tools-adb).",
+        notes="Official Google platform-tools bundle. Also available via apt (android-tools-adb).",
         apt_package="android-tools-adb",
     )
 )

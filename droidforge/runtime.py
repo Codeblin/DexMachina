@@ -40,6 +40,15 @@ RESERVED_COMMANDS = frozenset(
         "arsenal",
         "bypass",
         "hook",
+        "init",
+        "up",
+        "shell",
+        "console",
+        "profile",
+        "lock",
+        "restore",
+        "get",
+        "device",
     }
 )
 
@@ -156,7 +165,153 @@ def build_run_env(config: dict) -> dict[str, str]:
     java = get_setting(config, "java_path", "java")
     if java:
         env.setdefault("DROIDFORGE_JAVA", java)
+    env["DROIDFORGE_SHELL"] = "1"
     return env
+
+
+def shell_path_hint(config: dict) -> str:
+    """Shell snippet to put ALL DroidForge tool bins on PATH (not just frida)."""
+    paths = collect_tool_bin_paths(config)
+    if not paths:
+        return (
+            "No DroidForge tools installed yet.\n"
+            "Install some: droidforge up   (or: droidforge install <tool>)"
+        )
+    joined = os.pathsep.join(str(p) for p in paths)
+    if detect_platform() == "windows":
+        return (
+            "# CMD:\n"
+            f"set PATH={joined};%PATH%\n"
+            "# PowerShell:\n"
+            f'$env:PATH = "{joined};$env:PATH"\n'
+            "# Or just open a ready shell:  droidforge shell"
+        )
+    return (
+        f'export PATH="{joined}:$PATH"\n'
+        "# Or just open a ready shell:  droidforge shell"
+    )
+
+
+def _windows_parent_shell_exe() -> str | None:
+    """Best-effort: name of the cmd/powershell/pwsh process that launched us."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        TH32CS_SNAPPROCESS = 0x00000002
+
+        class PROCESSENTRY32(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", wintypes.DWORD),
+                ("szExeFile", ctypes.c_char * 260),
+            ]
+
+        kernel32 = ctypes.windll.kernel32
+        snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snapshot == -1:
+            return None
+        try:
+            entry = PROCESSENTRY32()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+            procs: dict[int, tuple[int, str]] = {}
+            if not kernel32.Process32First(snapshot, ctypes.byref(entry)):
+                return None
+            while True:
+                procs[entry.th32ProcessID] = (
+                    entry.th32ParentProcessID,
+                    entry.szExeFile.decode(errors="ignore"),
+                )
+                if not kernel32.Process32Next(snapshot, ctypes.byref(entry)):
+                    break
+        finally:
+            kernel32.CloseHandle(snapshot)
+
+        pid = os.getpid()
+        for _ in range(10):
+            info = procs.get(pid)
+            if not info:
+                break
+            ppid, name = info
+            low = name.lower()
+            if low in ("cmd.exe", "powershell.exe", "pwsh.exe"):
+                return low
+            pid = ppid
+    except Exception:  # noqa: BLE001 - detection is best-effort only
+        return None
+    return None
+
+
+def _detect_shell_kind() -> str:
+    """Return 'powershell' | 'pwsh' | 'cmd' | 'posix' for the user's shell."""
+    if detect_platform() != "windows":
+        return "posix"
+
+    override = os.environ.get("DROIDFORGE_SHELL_EXE", "").lower()
+    if "pwsh" in override:
+        return "pwsh"
+    if "powershell" in override:
+        return "powershell"
+    if "cmd" in override:
+        return "cmd"
+
+    parent = _windows_parent_shell_exe()
+    if parent == "pwsh.exe":
+        return "pwsh"
+    if parent == "powershell.exe":
+        return "powershell"
+    if parent == "cmd.exe":
+        return "cmd"
+
+    if which("pwsh"):
+        return "pwsh"
+    if which("powershell"):
+        return "powershell"
+    return "cmd"
+
+
+def pick_user_shell() -> list[str]:
+    """Return argv for an interactive subshell that stays open with a clear prompt."""
+    kind = _detect_shell_kind()
+
+    if kind == "posix":
+        shell = os.environ.get("SHELL") or which("bash") or "/bin/sh"
+        return [shell]
+
+    if kind == "cmd":
+        comspec = os.environ.get("COMSPEC") or "cmd.exe"
+        # /K keeps cmd open; custom prompt makes the DroidForge shell obvious.
+        return [comspec, "/K", "prompt [DroidForge] $P$G"]
+
+    exe = (which("pwsh") if kind == "pwsh" else which("powershell")) or which("pwsh") or "powershell"
+    ps_prompt = (
+        "function prompt { \"[DroidForge] PS \" "
+        "+ $executionContext.SessionState.Path.CurrentLocation + \"> \" }"
+    )
+    return [exe, "-NoLogo", "-NoExit", "-Command", ps_prompt]
+
+
+def can_launch_interactive_shell() -> bool:
+    """True when stdin/stdout are attached to a real terminal."""
+    try:
+        return bool(sys.stdin and sys.stdin.isatty() and sys.stdout and sys.stdout.isatty())
+    except (ValueError, OSError):
+        return False
+
+
+def launch_shell(config: dict) -> int:
+    """Open an interactive subshell with DroidForge tools on PATH."""
+    env = build_run_env(config)
+    argv = pick_user_shell()
+    result = subprocess.run(argv, env=env)
+    return result.returncode
 
 
 def resolve_executable(config: dict, tool: Tool, executable: str) -> list[str]:

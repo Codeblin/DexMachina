@@ -24,12 +24,15 @@ from droidforge.utils import (
     detect_platform,
     detect_system_package_manager,
     extract_release_version,
+    fetch_pypi_latest_version,
     find_git,
     get_github_default_branch,
     get_installed_version,
     get_latest_github_release,
     github_headers,
     is_binary_available,
+    load_pip_package_versions,
+    normalize_pkg_name,
     npm_show_version,
     parse_version,
     pip_show_version,
@@ -45,13 +48,54 @@ class InstallError(Exception):
     """Installation failed with a user-facing message."""
 
 
-def get_tool_version(tool: Tool) -> str | None:
+_latest_version_cache: dict[str, str | None] = {}
+
+
+def _merged_pip_versions(config: dict | None) -> dict[str, str]:
+    versions = load_pip_package_versions()
+    if not config:
+        return versions
+
+    from droidforge.versions import frida_venv_path, get_active_frida_version
+
+    active = get_active_frida_version(config)
+    if not active:
+        return versions
+
+    venv = frida_venv_path(active)
+    from droidforge.versions import _venv_python
+
+    py = _venv_python(venv)
+    if not py.is_file():
+        return versions
+
+    venv_versions = load_pip_package_versions(python=str(py), use_cache=False)
+    return {**versions, **venv_versions}
+
+
+def warm_version_cache(config: dict | None = None) -> None:
+    """Pre-load pip package versions (one subprocess) before bulk scans."""
+    _merged_pip_versions(config)
+
+
+def _tool_has_install_artifacts(tool: Tool, config: dict | None) -> bool:
+    if tool.binary_name and is_binary_available(tool.binary_name):
+        return True
+    if not config:
+        return False
+    inst_bin = install_dir(config) / tool.name / "bin"
+    if inst_bin.is_dir() and any(inst_bin.iterdir()):
+        return True
+    return False
+
+
+def get_tool_version(tool: Tool, config: dict | None = None) -> str | None:
     """Get currently installed version for a tool."""
     if tool.install_method == "manual":
         return None
 
     if tool.install_method == "pip" and tool.pip_package:
-        ver = pip_show_version(tool.pip_package)
+        ver = _merged_pip_versions(config).get(normalize_pkg_name(tool.pip_package))
         if ver:
             return ver
 
@@ -61,58 +105,41 @@ def get_tool_version(tool: Tool) -> str | None:
             return ver
 
     if tool.version_cmd or tool.binary_name:
+        if not _tool_has_install_artifacts(tool, config):
+            return None
         return get_installed_version(tool.version_cmd, tool.binary_name)
 
     return None
 
 
-def get_latest_version(tool: Tool) -> str | None:
+def get_latest_version(tool: Tool, *, fetch: bool = True) -> str | None:
     """Fetch latest available version."""
-    if tool.install_method == "manual":
+    if not fetch:
         return None
 
-    if tool.install_method == "pip" and tool.pip_package:
-        result = run_cmd([sys.executable, "-m", "pip", "index", "versions", tool.pip_package])
-        if result.returncode == 0 and result.stdout:
-            # "Available versions: 1.0, 2.0, ..."
-            import re
+    if tool.name in _latest_version_cache:
+        return _latest_version_cache[tool.name]
 
-            match = re.search(r"Available versions:\s*([^\n]+)", result.stdout)
-            if match:
-                versions = [v.strip() for v in match.group(1).split(",")]
-                if versions:
-                    return versions[0]
-        # Fallback: pip install dry-run
-        result = run_cmd(
-            [sys.executable, "-m", "pip", "install", f"{tool.pip_package}==invalid"],
-        )
-        # Try PyPI JSON API
-        try:
-            resp = requests.get(
-                f"https://pypi.org/pypi/{tool.pip_package}/json",
-                timeout=15,
-            )
-            resp.raise_for_status()
-            return resp.json()["info"]["version"]
-        except (requests.RequestException, KeyError):
-            return None
-
-    if tool.github_repo:
+    latest: str | None = None
+    if tool.install_method == "manual":
+        latest = None
+    elif tool.install_method == "pip" and tool.pip_package:
+        latest = fetch_pypi_latest_version(tool.pip_package)
+    elif tool.github_repo:
         try:
             release = get_latest_github_release(tool.github_repo)
-            return extract_release_version(release)
+            latest = extract_release_version(release)
         except requests.RequestException:
-            return None
+            latest = None
+    elif tool.install_method == "npm" and tool.npm_package:
+        from droidforge.utils import PIP_CMD_TIMEOUT
 
-    if tool.install_method == "npm" and tool.npm_package:
-        result = run_cmd(f"npm view {tool.npm_package} version")
+        result = run_cmd(f"npm view {tool.npm_package} version", timeout=PIP_CMD_TIMEOUT)
         if result.returncode == 0:
-            return (result.stdout or "").strip()
+            latest = (result.stdout or "").strip() or None
 
-    if tool.install_method in ("apt", "brew"):
-        return None  # system package manager doesn't expose easy latest
-
-    return None
+    _latest_version_cache[tool.name] = latest
+    return latest
 
 
 def _pip_install(package: str, version: str | None, force: bool) -> None:
@@ -385,6 +412,42 @@ def _extract_archive(archive: Path, dest: Path) -> None:
         shutil.copy(archive, dest / archive.name)
 
 
+def _platform_download_key() -> str:
+    """Map the host platform to common archive URL tokens (windows/linux/darwin)."""
+    plat = detect_platform()
+    return {"windows": "windows", "linux": "linux", "macos": "darwin"}.get(plat, plat)
+
+
+def _install_direct(
+    tool: Tool,
+    cfg: dict,
+    progress: Progress | None = None,
+) -> None:
+    """Install a tool from a direct archive URL (e.g. Google platform-tools)."""
+    if not tool.download_url_template:
+        raise InstallError(f"No download URL defined for {tool.name}")
+
+    url = tool.download_url_template.format(platform=_platform_download_key())
+    inst = install_dir(cfg)
+    tool_dir = inst / tool.name
+    tool_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        archive = tmp_path / Path(url).name
+        try:
+            _download_file(url, archive, progress)
+        except requests.RequestException as e:
+            raise InstallError(f"Failed to download {tool.display_name} from {url}: {e}") from e
+        extract_to = tool_dir / "extracted"
+        if extract_to.exists():
+            shutil.rmtree(extract_to)
+        _extract_archive(archive, extract_to)
+        _link_binaries(tool, extract_to, tool_dir)
+
+    console.print(f"[green]✓[/] {tool.display_name} installed at {tool_dir}")
+
+
 def _install_github_release(
     tool: Tool,
     version: str | None,
@@ -405,7 +468,13 @@ def _install_github_release(
             raise InstallError(f"Failed to fetch release {version} for {tool.name}: {e}") from e
         ver = version.lstrip("v")
     else:
-        release = get_latest_github_release(tool.github_repo)
+        try:
+            release = get_latest_github_release(tool.github_repo)
+        except requests.RequestException as e:
+            raise InstallError(
+                f"Could not fetch latest release for {tool.display_name} "
+                f"(github.com/{tool.github_repo}): {e}"
+            ) from e
         ver = extract_release_version(release)
 
     asset = _find_asset(release, tool.github_asset_pattern, ver)
@@ -431,63 +500,107 @@ def _install_github_release(
         raise InstallError(f"No suitable release asset found for {tool.name} v{ver}")
 
 
+def _find_executable_in_tree(root: Path, name: str) -> Path | None:
+    """Find an executable named `name` (with or without .exe) under root.
+
+    Prefers an exact stem match so we don't grab e.g. AdbWinApi.dll for 'adb'.
+    """
+    candidates = [
+        p
+        for p in (*root.rglob(name), *root.rglob(f"{name}.exe"))
+        if p.is_file()
+    ]
+    if not candidates:
+        return None
+    exact = [c for c in candidates if c.stem.lower() == name.lower()]
+    return exact[0] if exact else candidates[0]
+
+
+def _wrap_in_place(bin_dir: Path, wrapper_name: str, target: Path) -> None:
+    """Write a launcher in bin_dir that runs `target` from its own directory.
+
+    Running in place keeps sibling files (e.g. AdbWinApi.dll, scrcpy DLLs) next
+    to the executable, which copying a lone binary would break.
+    """
+    if detect_platform() != "windows":
+        try:
+            target.chmod(target.stat().st_mode | stat.S_IEXEC)
+        except OSError:
+            pass
+    _write_cli_wrapper(bin_dir / wrapper_name, [str(target)])
+
+
 def _link_binaries(tool: Tool, extract_root: Path, tool_dir: Path) -> None:
     """Create wrapper scripts in tool_dir/bin for discovered binaries."""
     bin_dir = tool_dir / "bin"
-    bin_dir.mkdir(exist_ok=True)
+    bin_dir.mkdir(parents=True, exist_ok=True)
 
-    if tool.binary_name:
-        candidates = list(extract_root.rglob(tool.binary_name + "*"))
-        candidates = [c for c in candidates if c.is_file()]
-        if tool.binary_name.endswith(".jar") or any(c.suffix == ".jar" for c in candidates):
-            jar = next((c for c in candidates if c.suffix == ".jar"), None)
-            if not jar:
-                jars = list(extract_root.rglob("*.jar"))
-                jar = jars[0] if jars else None
-            if jar:
-                dest_jar = tool_dir / jar.name
-                shutil.copy(jar, dest_jar)
-                wrapper = bin_dir / tool.binary_name
-                if detect_platform() == "windows":
-                    wrapper = bin_dir / f"{tool.binary_name}.bat"
-                    wrapper.write_text(
-                        f'@echo off\njava -jar "{dest_jar}" %*\n',
-                        encoding="utf-8",
-                    )
-                else:
-                    wrapper.write_text(
-                        f'#!/bin/sh\nexec java -jar "{dest_jar}" "$@"\n',
-                        encoding="utf-8",
-                    )
-                    wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
-            return
+    if not tool.binary_name:
+        return
 
-        if candidates:
-            src = candidates[0]
-            dest = bin_dir / tool.binary_name
-            if detect_platform() == "windows" and not src.suffix:
-                dest = bin_dir / f"{tool.binary_name}.exe"
-            shutil.copy(src, dest)
-            if detect_platform() != "windows":
-                dest.chmod(dest.stat().st_mode | stat.S_IEXEC)
+    candidates = [c for c in extract_root.rglob(tool.binary_name + "*") if c.is_file()]
+    if tool.binary_name.endswith(".jar") or any(c.suffix == ".jar" for c in candidates):
+        jar = next((c for c in candidates if c.suffix == ".jar"), None)
+        if not jar:
+            jars = list(extract_root.rglob("*.jar"))
+            jar = jars[0] if jars else None
+        if jar:
+            dest_jar = tool_dir / jar.name
+            shutil.copy(jar, dest_jar)
+            wrapper = bin_dir / tool.binary_name
+            if detect_platform() == "windows":
+                wrapper = bin_dir / f"{tool.binary_name}.bat"
+                wrapper.write_text(
+                    f'@echo off\njava -jar "{dest_jar}" %*\n',
+                    encoding="utf-8",
+                )
+            else:
+                wrapper.write_text(
+                    f'#!/bin/sh\nexec java -jar "{dest_jar}" "$@"\n',
+                    encoding="utf-8",
+                )
+                wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
+        return
+
+    # Native binary: wrap it in place so bundled libraries stay alongside it.
+    main = _find_executable_in_tree(extract_root, tool.binary_name)
+    if main:
+        _wrap_in_place(bin_dir, tool.binary_name, main)
+
+    for alias in tool.cli_aliases:
+        target = _find_executable_in_tree(extract_root, alias)
+        if target:
+            _wrap_in_place(bin_dir, alias, target)
 
 
-def _install_system(tool: Tool) -> None:
+def _install_system(tool: Tool, cfg: dict, progress: Progress | None = None) -> None:
     pm = detect_system_package_manager()
     pkg = tool.brew_package if pm == "brew" else tool.apt_package
     if not pkg:
         pkg = tool.apt_package or tool.brew_package
-    if not pkg:
-        raise InstallError(f"No system package defined for {tool.name}")
-    if pm == "brew":
+    if pm == "brew" and pkg:
         _brew_install(pkg)
-    elif pm == "apt":
+        return
+    if pm == "apt" and pkg:
         _apt_install(pkg)
-    else:
-        raise InstallError(
-            f"No supported package manager for {tool.name}. "
-            f"Install {pkg} manually."
+        return
+
+    # No usable package manager (e.g. Windows): fall back to a GitHub release.
+    if tool.github_repo:
+        console.print(
+            f"[yellow]No system package manager for {tool.display_name}; "
+            "trying a GitHub release instead.[/]"
         )
+        _install_github_release(tool, None, cfg, progress)
+        return
+
+    hint = f"Install '{pkg}' with your OS package manager." if pkg else ""
+    if tool.manual_url:
+        hint += f" Or download: {tool.manual_url}"
+    raise InstallError(
+        f"{tool.display_name} needs a system package manager (apt/brew) which "
+        f"isn't available here. {hint}".strip()
+    )
 
 
 def install_tool(
@@ -503,8 +616,10 @@ def install_tool(
     if tool.install_method == "manual":
         url = tool.manual_url or "project website"
         raise InstallError(
-            f"{tool.display_name} is manual-only. Download from: {url}\n"
-            f"{tool.notes or ''}"
+            f"{tool.display_name} is a manual install (GUI/commercial or OS-specific).\n"
+            f"  Download: {url}\n"
+            f"  {tool.notes or ''}\n"
+            f"  Hide it from reports: add '{tool.name}' to [ignored] tools in droidforge.toml"
         )
 
     pinned = get_pinned_version(cfg, tool_name)
@@ -528,12 +643,16 @@ def install_tool(
         _install_github_release(tool, target_version, cfg, progress)
         return
 
+    if tool.install_method == "direct":
+        _install_direct(tool, cfg, progress)
+        return
+
     if tool.install_method == "git":
         _install_git_clone(tool, cfg, force=force)
         return
 
     if tool.install_method in ("apt", "brew"):
-        _install_system(tool)
+        _install_system(tool, cfg, progress)
         return
 
     raise InstallError(f"Unsupported install method '{tool.install_method}' for {tool.name}")
@@ -577,7 +696,14 @@ def install_tools(
     version: str | None = None,
     force: bool = False,
     on_progress: Callable[[str], None] | None = None,
-) -> None:
+    continue_on_error: bool = False,
+) -> list[tuple[str, str]]:
+    """Install tools in dependency order.
+
+    Returns a list of (tool_name, error) for failures. When ``continue_on_error``
+    is False the first failure (other than under ``force``) is raised.
+    """
+    failures: list[tuple[str, str]] = []
     order = resolve_install_order(tool_names)
 
     with Progress(
@@ -628,9 +754,17 @@ def install_tools(
                 console.print(f"[green]✓[/] Installed {tool.display_name}")
             except InstallError as e:
                 console.print(f"[red]✗[/] {tool.display_name}: {e}")
-                if not force:
+                failures.append((name, str(e)))
+                if not force and not continue_on_error:
                     raise
+            except Exception as e:  # noqa: BLE001 - keep one bad tool from aborting the run
+                console.print(f"[red]✗[/] {tool.display_name}: unexpected error: {e}")
+                failures.append((name, str(e)))
+                if not force and not continue_on_error:
+                    raise InstallError(f"{tool.display_name}: {e}") from e
             progress.advance(task)
+
+    return failures
 
 
 def update_tool(
@@ -762,22 +896,22 @@ def update_pin_group(
         raise InstallError(str(e)) from e
 
 
-def get_tool_status(tool: Tool, cfg: dict) -> dict:
+def get_tool_status(tool: Tool, cfg: dict, *, fetch_latest: bool = True) -> dict:
     """Return status dict for a tool."""
-    installed = get_tool_version(tool)
-    latest = get_latest_version(tool)
+    installed = get_tool_version(tool, cfg)
+    latest = get_latest_version(tool, fetch=fetch_latest)
     pinned = get_pinned_version(cfg, tool.name)
     ignored = tool.name in cfg.get("ignored", {}).get("tools", [])
 
     if tool.install_method == "manual":
         status = "manual"
-    elif installed is None and not is_binary_available(tool.binary_name):
+    elif installed is None and not _tool_has_install_artifacts(tool, cfg):
         status = "missing"
     elif pinned:
         status = "pinned"
     elif latest and installed and compare_versions(installed, latest) < 0:
         status = "outdated"
-    elif installed or is_binary_available(tool.binary_name):
+    elif installed or _tool_has_install_artifacts(tool, cfg):
         status = "ok"
     else:
         status = "missing"
