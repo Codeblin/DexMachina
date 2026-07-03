@@ -26,51 +26,38 @@ C_WARN = "#ffb000"         # amber
 C_DIM = "#3a6652"          # muted green
 C_GLOW = "#39ff14"         # neon
 
-ROBOT = "\n".join(
-    [
-        r"                         ___________",
-        r"                     .-'           '-.",
-        r"                    /    .- .---. -.     \\",
-        r"                   /   .'  _ _  '.    \\",
-        r"                  /   /   (o o)   \    \\",
-        r"                 ;   |      ^       |   ;",
-        r"                 |    \     -     /    |",
-        r"                 |     '.   ___  .'     |",
-        r"                  \       '---'       /",
-        r"                   \                 /",
-        r"                    \   .-------.   /",
-        r"                     '-.|       |.-'",
-        r"                        |       |",
-        r"                     ___|_______|___",
-        r"                    /               \\",
-    ]
-)
-
-LOGO = r"""
-  ____   ____   ___  ____  _____ ____  ___  _____
- |  _ \ |  _ \ / _ \|  _ \|  ___/ ___|/ _ \| ____|
- | | | || |_) | | | | | | | |_ | |  _| | | |  _|
- | |_| ||  _ <| |_| | |_| |  _|| |_| | |_| | |___
- |____/ |_| \_\___/|____/|_|   \____|\___/|_____|
+MACHINE_EYE = r"""
+      .---------.
+  .--' .-----. '--.
+ /    / _____ \    \
+|[::]| /     \ |[::]|
+|----|<   X   >|----|
+|[::]| \_____/ |[::]|
+ \    \       /    /
+  '--. '-----' .--'
+      '---+---'
+          V
 """
 
-FORGE_ANVIL = r"""
-                              ╱╲
-                             ╱  ╲
-                            ╱ ▓▓ ╲
-                           ╱ ▓▓▓▓ ╲
-                          ╱________╲
-                         │ ▓▓▓▓▓▓▓▓ │
-                         │ ▓▓▓▓▓▓▓▓ │
-                         └──────────┘
+LOGO = r"""
+  ____  _____ __  __
+ |  _ \| ____|\ \/ /
+ | | | |  _|   \  /
+ | |_| | |___  /  \
+ |____/|_____|/_/\_\
+
+  __  __    _    ____ _   _ ___ _   _    _
+ |  \/  |  / \  / ___| | | |_ _| \ | |  / \
+ | |\/| | / _ \| |   | |_| || ||  \| | / _ \
+ | |  | |/ ___ \ |___|  _  || || |\  |/ ___ \
+ |_|  |_/_/   \_\____|_| |_|___|_| \_/_/   \_\
 """
 
 CIRCUIT_FOOTER = (
-    "  ◈ ─── ⟨ adb ⟩ ─── ⟨ frida ⟩ ─── ⟨ jadx ⟩ ─── "
-    "⟨ objection ⟩ ─── ⟨ apktool ⟩ ─── ◈"
+    "[ adb ]---[ frida ]---[ jadx ]---[ objection ]---[ apktool ]"
 )
 
-TAGLINE = "▸  Android Pentest Arsenal Manager  ◂"
+TAGLINE = "ANDROID PENTEST ENVIRONMENT"
 
 
 def banner_enabled() -> bool:
@@ -78,35 +65,21 @@ def banner_enabled() -> bool:
     return val not in ("1", "true", "yes")
 
 
-def _blend_hex(a: str, b: str, t: float) -> str:
-    """Linear interpolate between two #RRGGBB colors."""
-    t = max(0.0, min(1.0, t))
-    ar, ag, ab = int(a[1:3], 16), int(a[3:5], 16), int(a[5:7], 16)
-    br, bg, bb = int(b[1:3], 16), int(b[3:5], 16), int(b[5:7], 16)
-    r = int(ar + (br - ar) * t)
-    g = int(ag + (bg - ag) * t)
-    bl = int(ab + (bb - ab) * t)
-    return f"#{r:02x}{g:02x}{bl:02x}"
-
-
-def _colorize_robot(art: str) -> Text:
-    lines = art.splitlines()
+def _colorize_machine(art: str) -> Text:
     result = Text()
+    lines = art.strip("\n").splitlines()
     for i, line in enumerate(lines):
         if i > 0:
             result.append("\n")
-        # Eyes pop magenta, body green gradient
-        for j, ch in enumerate(line):
-            if ch in "o":
+        for ch in line:
+            if ch == "X":
                 result.append(ch, style=Style(color=C_ACCENT, bold=True))
-            elif ch in "()":
-                result.append(ch, style=Style(color=C_SECONDARY))
-            elif ch in "_-|/\\;'":
-                result.append(ch, style=Style(color=C_DIM))
-            elif ch in "^":
-                result.append(ch, style=Style(color=C_WARN))
-            elif ch.strip():
-                result.append(ch, style=Style(color=C_PRIMARY))
+            elif ch in "<>V":
+                result.append(ch, style=Style(color=C_WARN, bold=True))
+            elif ch in "/\\_":
+                result.append(ch, style=Style(color=C_SECONDARY, bold=True))
+            elif ch in "|.-'+:[]":
+                result.append(ch, style=Style(color=C_PRIMARY, bold=True))
             else:
                 result.append(ch)
     return result
@@ -114,75 +87,58 @@ def _colorize_robot(art: str) -> Text:
 
 def _colorize_logo(art: str) -> Text:
     result = Text()
-    lines = [ln for ln in art.splitlines() if ln.strip()]
+    lines = art.strip("\n").splitlines()
     for i, line in enumerate(lines):
         if i > 0:
             result.append("\n")
-        for j, ch in enumerate(line):
-            if ch in "|\\/_":
-                result.append(ch, style=Style(color=C_DIM))
-            elif ch.isupper() or ch in "DRFGEOI":
-                result.append(ch, style=Style(color=C_PRIMARY, bold=True))
-            elif ch.islower():
-                result.append(ch, style=Style(color=C_SECONDARY))
-            else:
-                result.append(ch, style=Style(color=_blend_hex(C_SECONDARY, C_PRIMARY, i / max(len(lines) - 1, 1))))
-    return result
-
-
-def _colorize_anvil(art: str) -> Text:
-    result = Text()
-    for i, line in enumerate(art.splitlines()):
-        if i > 0:
-            result.append("\n")
-        for ch in line:
-            if ch == "▓":
-                result.append(ch, style=Style(color=C_WARN, bold=True))
-            elif ch in "╱╲_│└┘─":
-                result.append(ch, style=Style(color=C_DIM))
-            else:
-                result.append(ch, style=Style(color=C_SECONDARY))
+        if not line:
+            continue
+        color = C_SECONDARY if i < 5 else C_PRIMARY
+        result.append(line, style=Style(color=color, bold=True))
     return result
 
 
 def render_banner(*, compact: bool = False, version: str = __version__) -> RenderableType:
     if compact:
         line = Text()
-        line.append("◆ ", style=Style(color=C_ACCENT, bold=True))
-        line.append("DROID", style=Style(color=C_SECONDARY, bold=True))
-        line.append("FORGE", style=Style(color=C_PRIMARY, bold=True))
+        line.append("[::] ", style=Style(color=C_ACCENT, bold=True))
+        line.append("DEX", style=Style(color=C_SECONDARY, bold=True))
+        line.append("MACHINA", style=Style(color=C_PRIMARY, bold=True))
         line.append(f"  v{version}  ", style=Style(color=C_DIM))
         line.append("│", style=Style(color=C_DIM))
-        line.append(" android pentest arsenal ", style=Style(color=C_GLOW, italic=True))
+        line.append(" android pentest environment ", style=Style(color=C_GLOW, italic=True))
         return Panel(
             line,
             border_style=Style(color=C_DIM),
             padding=(0, 1),
         )
 
-    robot = Align(_colorize_robot(ROBOT), align="center")
-    logo = Align(_colorize_logo(LOGO), align="center")
-    anvil = Align(_colorize_anvil(FORGE_ANVIL), align="center")
-    version_txt = Align(
-        Text(f" v{version} ", style=Style(color=C_WARN, bold=True)),
-        align="center",
-    )
-    footer = Align(Text(CIRCUIT_FOOTER, style=Style(color=C_DIM)), align="center")
+    hero = Table.grid(padding=(0, 3))
+    hero.add_column(no_wrap=True)
+    hero.add_column(no_wrap=True)
+    hero.add_row(_colorize_machine(MACHINE_EYE), _colorize_logo(LOGO))
+    hero_lockup = Align(hero, align="center")
+    identity = Text(justify="center")
+    identity.append(":: ", style=Style(color=C_ACCENT, bold=True))
+    identity.append(TAGLINE, style=Style(color=C_GLOW, bold=True))
+    identity.append(" ::", style=Style(color=C_ACCENT, bold=True))
+    metadata = Text(justify="center")
+    metadata.append(f"v{version}", style=Style(color=C_WARN, bold=True))
+    metadata.append("  //  ", style=Style(color=C_DIM))
+    metadata.append("DEX BYTECODE", style=Style(color=C_SECONDARY))
+    metadata.append("  //  ", style=Style(color=C_DIM))
+    metadata.append("MOBILE SECURITY", style=Style(color=C_PRIMARY))
+    footer = Text(CIRCUIT_FOOTER, style=Style(color=C_DIM), justify="center")
 
     stack = Group(
         Panel(
-            Group(robot, Text(""), logo),
+            Group(hero_lockup, Text(""), identity, metadata, Text(""), footer),
             border_style=Style(color=C_PRIMARY),
             padding=(1, 2),
-            title="[bold bright_green]⚡ DEXMACHINA ⚡[/]",
+            title="[bold bright_green][ DEXMACHINA ][/]",
             title_align="center",
-            subtitle=TAGLINE,
-            subtitle_align="center",
         ),
-        anvil,
-        version_txt,
-        Rule(style=Style(color=C_DIM)),
-        footer,
+        Rule("[dim]environment online[/]", style=Style(color=C_DIM)),
     )
     return stack
 

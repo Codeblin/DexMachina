@@ -1214,7 +1214,7 @@ def up_cmd(
     yes: bool,
     no_lock: bool,
 ) -> None:
-    """One command to build the environment: install a profile, set up frida, ready PATH."""
+    """Build or converge the environment; existing compatible tools are skipped."""
     print_banner(console, compact=True)
 
     # Auto-init a repo-local workspace when inside a git repo with no config yet.

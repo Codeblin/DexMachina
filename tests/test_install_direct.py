@@ -100,6 +100,7 @@ def test_install_tools_continue_on_error_collects_failures(tmp_path, monkeypatch
             raise InstallError("network down")
 
     monkeypatch.setattr(installer, "install_tool", boom)
+    monkeypatch.setattr(installer, "installation_satisfied", lambda *_args: (False, None))
 
     failures = install_tools(["adb"], cfg, continue_on_error=True)
     assert failures == [("adb", "network down")]
@@ -112,7 +113,62 @@ def test_install_tools_wraps_unexpected_error(tmp_path, monkeypatch):
         raise RuntimeError("404 not found")
 
     monkeypatch.setattr(installer, "install_tool", boom)
+    monkeypatch.setattr(installer, "installation_satisfied", lambda *_args: (False, None))
 
     # Non-InstallError must be wrapped, not propagated raw.
     with pytest.raises(InstallError):
         install_tools(["jadx"], cfg)
+
+
+def test_install_tools_skips_satisfied_install(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        installer,
+        "installation_satisfied",
+        lambda _tool, _cfg, _version: (True, "1.2.3"),
+    )
+    monkeypatch.setattr(
+        installer,
+        "install_tool",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert install_tools(["adb"], cfg) == []
+    assert calls == []
+
+
+def test_install_tools_reinstalls_version_mismatch(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        installer,
+        "installation_satisfied",
+        lambda _tool, _cfg, _version: (False, "1.0.0"),
+    )
+    monkeypatch.setattr(
+        installer,
+        "install_tool",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    install_tools(["adb"], cfg, version="2.0.0")
+    assert len(calls) == 1
+
+
+def test_install_tools_force_bypasses_satisfied_check(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    calls = []
+
+    def should_not_run(*_args):
+        raise AssertionError("force install should not check existing state")
+
+    monkeypatch.setattr(installer, "installation_satisfied", should_not_run)
+    monkeypatch.setattr(
+        installer,
+        "install_tool",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    install_tools(["adb"], cfg, force=True)
+    assert len(calls) == 1

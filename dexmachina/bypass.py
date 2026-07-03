@@ -289,10 +289,11 @@ def preflight(config: dict, *, network: bool, serial: str | None = None) -> None
         except RunError:
             pass
     if frida_ps:
-        result = run_cmd([frida_ps, "-U"], env=env)
+        transport = ["-D", serial] if serial else ["-U"]
+        result = run_cmd([frida_ps, *transport], env=env)
         if result.returncode != 0:
             console.print(
-                "[yellow]Warning:[/] frida-ps -U failed — is frida-server running?\n"
+                "[yellow]Warning:[/] frida-ps failed — is frida-server running?\n"
                 "  [dim]Try:[/] [cyan]dexmachina push-server[/]"
             )
 
@@ -310,7 +311,7 @@ def build_objection_argv(
     argv = list(resolve_executable(config, tool, "objection"))
     if network:
         argv.append("-N")
-    if serial:
+    elif serial:
         argv.extend(["-S", serial])
     if foremost:
         argv.append("-f")
@@ -339,11 +340,11 @@ def build_frida_argv(
     tool = get_tool("frida")
     argv = list(resolve_executable(config, tool, "frida"))
     if network:
-        argv.append("-H")
+        argv.append("-R")
+    elif serial:
+        argv.extend(["-D", serial])
     else:
         argv.append("-U")
-    if serial:
-        argv.extend(["-D", serial])
     if foremost:
         argv.append("-F")
     elif target.spawn:

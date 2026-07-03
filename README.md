@@ -82,7 +82,7 @@ CLI uses (`device ready`, `bypass`, `objection`, …) — just faster to chain.
 | `target <package>` | Set the app under test (accepts substrings) |
 | `status` | Device + frida runtime + frida-server + target |
 | `ready` | Push & start frida-server matching local frida |
-| `hook` / `bypass [ssl\|root\|all]` | Run SSL/root bypass on the target |
+| `hook [--spawn]` / `bypass [ssl\|root\|all] [--spawn]` | Attach SSL/root bypass to a running target; optionally spawn |
 | `objection [args]` | Open Objection's explorer on the target |
 | `proxy <host:port>` / `proxy off` | Set/clear the device global HTTP proxy |
 | `logcat [filter]` | Stream device logs |
@@ -129,6 +129,21 @@ dexmachina status --offline
 # Diagnose / auto-repair
 dexmachina doctor
 dexmachina fix --bootstrap
+```
+
+### When to run `up`
+
+Run `dexmachina up` when creating an environment, after cloning an engagement
+workspace, or after changing its profile, pins, or lockfile. It is safe to run
+again: tools and Frida environments that already satisfy the configuration are
+skipped. Use `dexmachina update` for upgrades and `--force` only when you
+intentionally want a reinstall.
+
+For a normal daily pentest session, you usually only need:
+
+```bash
+dexmachina device ready          # reconnect/restart the matching frida-server
+dexmachina console               # resume device + target workflow
 ```
 
 ## Commands

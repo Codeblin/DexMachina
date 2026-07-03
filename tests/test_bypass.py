@@ -133,6 +133,43 @@ def test_build_frida_argv_prefers_identifier_over_pid():
     assert "-p" not in argv
 
 
+def test_build_frida_argv_serial_uses_only_device_id_transport():
+    cfg = {}
+    recipe = RECIPES["ssl"]
+    target = ResolvedTarget("com.example.app", "com.example.app", None, "App", True)
+    with patch("dexmachina.bypass.resolve_executable", return_value=["frida"]):
+        argv = build_frida_argv(
+            cfg,
+            recipe,
+            target,
+            serial="device-123",
+            network=False,
+            foremost=False,
+        )
+    assert argv.count("-D") == 1
+    assert "device-123" in argv
+    assert "-U" not in argv
+    assert "-R" not in argv
+
+
+def test_build_frida_argv_network_uses_remote_transport_only():
+    cfg = {}
+    recipe = RECIPES["ssl"]
+    target = ResolvedTarget("com.example.app", "com.example.app", None, "App", True)
+    with patch("dexmachina.bypass.resolve_executable", return_value=["frida"]):
+        argv = build_frida_argv(
+            cfg,
+            recipe,
+            target,
+            serial="ignored-device",
+            network=True,
+            foremost=False,
+        )
+    assert "-R" in argv
+    assert "-D" not in argv
+    assert "-U" not in argv
+
+
 def test_choose_engine_prefers_objection_for_ssl():
     cfg = {}
     with patch("dexmachina.bypass._tool_ready", side_effect=lambda _c, tool, _e: tool == "objection"):

@@ -14,7 +14,16 @@ from rich.table import Table
 
 from dexmachina.config import get_pinned_version, pin_tool, save_config
 from dexmachina.registry import FRIDA_PIN_GROUP, get_pin_group, get_tool
-from dexmachina.utils import compare_versions, detect_platform, fetch_pypi_latest_version, parse_version, pypi_version_exists, run_cmd, versions_match
+from dexmachina.utils import (
+    compare_versions,
+    detect_platform,
+    fetch_pypi_latest_version,
+    load_pip_package_versions,
+    parse_version,
+    pypi_version_exists,
+    run_cmd,
+    versions_match,
+)
 
 console = Console()
 
@@ -101,6 +110,28 @@ def frida_runtime_ready(version: str) -> bool:
     return False
 
 
+def frida_environment_ready(version: str) -> bool:
+    """True when the complete managed Frida environment is already usable."""
+    version = version.lstrip("v")
+    venv = frida_venv_path(version)
+    py = _venv_python(venv)
+    if not py.is_file():
+        return False
+
+    bindir = _venv_bin_dir(venv)
+    if not any((bindir / name).is_file() for name in ("frida", "frida.exe", "frida.cmd", "frida.bat")):
+        return False
+
+    packages = load_pip_package_versions(python=str(py), use_cache=False)
+    installed_frida = packages.get("frida")
+    return bool(
+        installed_frida
+        and versions_match(installed_frida, version)
+        and "frida-tools" in packages
+        and "objection" in packages
+    )
+
+
 def set_active_frida_version(config: dict, version: str) -> dict:
     import copy
 
@@ -179,6 +210,14 @@ def _pip_in_venv(venv: Path, *args: str) -> None:
 def ensure_frida_venv(frida_version: str, *, force: bool = False) -> Path:
     """Create venv and install frida stack (nvm-style isolated environment)."""
     frida_version = frida_version.lstrip("v")
+    venv = frida_venv_path(frida_version)
+
+    if not force and frida_environment_ready(frida_version):
+        console.print(
+            f"[dim]↷ Frida environment {frida_version} already ready — skipped[/]"
+        )
+        return venv
+
     if not pypi_version_exists("frida", frida_version):
         latest = fetch_pypi_latest_version("frida")
         hint = f" Latest on PyPI: {latest}." if latest else ""
@@ -190,7 +229,6 @@ def ensure_frida_venv(frida_version: str, *, force: bool = False) -> Path:
             target_frida=frida_version,
         )
 
-    venv = frida_venv_path(frida_version)
     venvs_root().mkdir(parents=True, exist_ok=True)
 
     if not venv.exists():

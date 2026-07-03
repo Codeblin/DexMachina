@@ -1,5 +1,8 @@
 """Tests for the interactive DexMachina console (REPL)."""
 
+import subprocess
+from types import SimpleNamespace
+
 import dexmachina.console as console_mod
 from dexmachina.console import DexMachinaConsole
 
@@ -77,3 +80,32 @@ def test_target_falls_back_to_literal_when_no_apps(monkeypatch):
     c = _make(monkeypatch, apps=[])
     c.do_target("com.manual.pkg")
     assert c.package == "com.manual.pkg"
+
+
+def test_adb_reverse_is_bounded_and_uses_selected_device(monkeypatch):
+    c = _make(monkeypatch, devices=["device-123"])
+    c.serial = "device-123"
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(console_mod.subprocess, "run", fake_run)
+    c.do_adb("reverse tcp:8080 tcp:8080")
+
+    argv, kwargs = calls[0]
+    assert argv[-3:] == ["reverse", "tcp:8080", "tcp:8080"]
+    assert "device-123" in argv
+    assert kwargs["timeout"] == 15
+
+
+def test_adb_reverse_timeout_returns_to_console(monkeypatch):
+    c = _make(monkeypatch, devices=["device-123"])
+    c.serial = "device-123"
+
+    def timeout(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    monkeypatch.setattr(console_mod.subprocess, "run", timeout)
+    assert c.do_adb("reverse tcp:8080 tcp:8080") is None

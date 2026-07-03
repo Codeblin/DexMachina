@@ -2,6 +2,8 @@
 
 import os
 
+from rich.console import Console
+
 from dexmachina.banner import banner_enabled, render_banner
 
 
@@ -20,9 +22,19 @@ def test_banner_disabled_via_env():
 
 def test_render_banner_compact():
     rendered = render_banner(compact=True)
-    assert rendered is not None
+    console = Console(record=True, color_system=None, width=100)
+    console.print(rendered)
+    output = console.export_text()
+    assert "DEXMACHINA" in output
+    assert "DROIDFORGE" not in output
 
 
 def test_render_banner_full():
     rendered = render_banner(compact=False)
-    assert rendered is not None
+    console = Console(record=True, color_system=None, width=100)
+    console.print(rendered)
+    output = console.export_text()
+    assert "ANDROID PENTEST ENVIRONMENT" in output
+    assert "<   X   >" in output
+    assert "'---+---'" in output
+    assert "DROIDFORGE" not in output

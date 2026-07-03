@@ -284,9 +284,10 @@ class DexMachinaConsole(cmd.Cmd):
         console.print("[green]◈ Device is frida-ready.[/] Try [cyan]apps[/] then [cyan]hook[/].")
 
     def do_ps(self, arg: str) -> None:
-        """ps — list running processes on the device (frida-ps -U)."""
+        """ps — list running processes on the selected device."""
         try:
-            run_invocation("frida-ps", ["-U"], self.config)
+            transport = ["-D", self.serial] if self.serial else ["-U"]
+            run_invocation("frida-ps", transport, self.config)
         except RunError as e:
             console.print(f"[red]{e}[/]")
 
@@ -310,18 +311,22 @@ class DexMachinaConsole(cmd.Cmd):
             console.print("\n[dim]Bypass session ended.[/]")
 
     def do_hook(self, arg: str) -> None:
-        """hook — SSL pinning + root bypass on the target (spawn). Alias: bypass all."""
-        self._run_bypass("all", spawn=True)
+        """hook [--spawn] — SSL + root bypass; attach to a running target by default."""
+        spawn = arg.strip().lower() in ("spawn", "--spawn")
+        self._run_bypass("all", spawn=spawn)
 
     def do_bypass(self, arg: str) -> None:
-        """bypass [ssl|root|all] — run a bypass preset on the target (default: all)."""
-        recipe = (arg.strip() or "all").lower()
+        """bypass [ssl|root|all] [--spawn] — attach by default."""
+        parts = self._split(arg.lower())
+        spawn = "--spawn" in parts or "spawn" in parts
+        parts = [part for part in parts if part not in ("--spawn", "spawn")]
+        recipe = (parts[0] if parts else "all").lower()
         if recipe not in ("ssl", "root", "all", "both"):
-            console.print(r"[yellow]Usage:[/] bypass \[ssl|root|all]")
+            console.print(r"[yellow]Usage:[/] bypass \[ssl|root|all] [--spawn]")
             return
         if recipe == "both":
             recipe = "all"
-        self._run_bypass(recipe, spawn=True)
+        self._run_bypass(recipe, spawn=spawn)
 
     def do_objection(self, arg: str) -> None:
         """objection [extra args] — open Objection's explorer on the target."""
@@ -347,7 +352,23 @@ class DexMachinaConsole(cmd.Cmd):
         if not args:
             console.print("[yellow]Usage:[/] adb <args...>   e.g. adb shell getprop ro.build.version.release")
             return
-        subprocess.run(self._adb_base() + args, env=build_run_env(self.config))
+        timeout = 15 if args[0] in ("reverse", "forward") else 60
+        try:
+            result = subprocess.run(
+                self._adb_base() + args,
+                env=build_run_env(self.config),
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            console.print(
+                f"[red]adb {args[0]} timed out after {timeout}s.[/] "
+                "Check the USB connection with [cyan]devices[/] and retry."
+            )
+            return
+        if result.returncode == 0:
+            console.print("[green]✓[/] adb command completed.")
+        else:
+            console.print(f"[red]adb command failed (exit {result.returncode}).[/]")
 
     def do_adbshell(self, arg: str) -> None:
         """adbshell — drop into an interactive adb shell on the device."""

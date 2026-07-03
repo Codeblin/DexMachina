@@ -112,6 +112,28 @@ def get_tool_version(tool: Tool, config: dict | None = None) -> str | None:
     return None
 
 
+def installation_satisfied(
+    tool: Tool,
+    config: dict,
+    target_version: str | None = None,
+) -> tuple[bool, str | None]:
+    """Return whether an existing install already satisfies this request.
+
+    An unversioned request is satisfied by either a detectable version or
+    managed/system install artifacts. A versioned request is only satisfied
+    when the detected version matches, so pins still converge correctly.
+    """
+    installed = get_tool_version(tool, config)
+    has_artifacts = _tool_has_install_artifacts(tool, config)
+
+    if target_version:
+        if installed and versions_match(installed, target_version):
+            return True, installed
+        return False, installed
+
+    return bool(installed or has_artifacts), installed
+
+
 def get_latest_version(tool: Tool, *, fetch: bool = True) -> str | None:
     """Fetch latest available version."""
     if not fetch:
@@ -733,6 +755,16 @@ def install_tools(
                 ver = version or pinned
             else:
                 ver = version if not in_group else None
+
+            if not force:
+                satisfied, installed = installation_satisfied(tool, cfg, ver)
+                if satisfied:
+                    detail = f" ({installed})" if installed else ""
+                    console.print(
+                        f"[dim]↷ {tool.display_name} already installed{detail} — skipped[/]"
+                    )
+                    progress.advance(task)
+                    continue
 
             if not force and ver:
                 conflicts = check_pin_group_conflict(name, ver, cfg)
