@@ -10,6 +10,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+from hashlib import sha256
 from pathlib import Path
 from typing import Callable
 
@@ -46,6 +47,10 @@ console = Console()
 
 class InstallError(Exception):
     """Installation failed with a user-facing message."""
+
+
+class DownloadVerificationError(InstallError):
+    """Downloaded artifact failed an integrity check."""
 
 
 _latest_version_cache: dict[str, str | None] = {}
@@ -375,22 +380,75 @@ def _install_git_clone(tool: Tool, cfg: dict, *, force: bool = False) -> None:
     _finalize_python_repo_install(tool, inst)
 
 
-def _download_file(url: str, dest: Path, progress: Progress | None = None) -> None:
+def _sha256_file(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_sha256(path: Path, expected: str | None) -> str | None:
+    if not expected:
+        return None
+    actual = _sha256_file(path)
+    if actual.lower() != expected.lower():
+        raise DownloadVerificationError(
+            f"Checksum mismatch for {path.name}:\n"
+            f"  expected sha256: {expected.lower()}\n"
+            f"  actual sha256:   {actual.lower()}\n"
+            "The archive was not extracted. Retry the download or update the registry "
+            "only after confirming the upstream release changed."
+        )
+    return actual
+
+
+def _expected_download_sha256(tool: Tool, platform_key: str) -> str | None:
+    expected = tool.download_sha256
+    if isinstance(expected, dict):
+        return expected.get(platform_key)
+    return expected
+
+
+def _download_file(
+    url: str,
+    dest: Path,
+    progress: Progress | None = None,
+    *,
+    expected_sha256: str | None = None,
+) -> str | None:
     resp = requests.get(url, headers=github_headers(), stream=True, timeout=120)
     resp.raise_for_status()
     total = int(resp.headers.get("content-length", 0))
     dest.parent.mkdir(parents=True, exist_ok=True)
+    partial = dest.with_name(f"{dest.name}.part")
 
     task = None
     if progress:
         task = progress.add_task(f"Downloading {dest.name}", total=total or None)
 
-    with dest.open("wb") as f:
+    written = 0
+    with partial.open("wb") as f:
         for chunk in resp.iter_content(chunk_size=8192):
             if chunk:
                 f.write(chunk)
+                written += len(chunk)
                 if progress and task is not None:
                     progress.update(task, advance=len(chunk))
+
+    if total and written != total:
+        partial.unlink(missing_ok=True)
+        raise DownloadVerificationError(
+            f"Incomplete download for {dest.name}: expected {total} bytes, got {written}."
+        )
+
+    try:
+        digest = _verify_sha256(partial, expected_sha256)
+    except DownloadVerificationError:
+        partial.unlink(missing_ok=True)
+        raise
+    partial.replace(dest)
+    return digest
 
 
 def _find_asset(release: dict, pattern: str | None, version: str) -> dict | None:
@@ -449,7 +507,9 @@ def _install_direct(
     if not tool.download_url_template:
         raise InstallError(f"No download URL defined for {tool.name}")
 
-    url = tool.download_url_template.format(platform=_platform_download_key())
+    platform_key = _platform_download_key()
+    url = tool.download_url_template.format(platform=platform_key)
+    expected_sha256 = _expected_download_sha256(tool, platform_key)
     inst = install_dir(cfg)
     tool_dir = inst / tool.name
     tool_dir.mkdir(parents=True, exist_ok=True)
@@ -458,7 +518,12 @@ def _install_direct(
         tmp_path = Path(tmp)
         archive = tmp_path / Path(url).name
         try:
-            _download_file(url, archive, progress)
+            digest = _download_file(
+                url,
+                archive,
+                progress,
+                expected_sha256=expected_sha256,
+            )
         except requests.RequestException as e:
             raise InstallError(f"Failed to download {tool.display_name} from {url}: {e}") from e
         extract_to = tool_dir / "extracted"
@@ -466,6 +531,8 @@ def _install_direct(
             shutil.rmtree(extract_to)
         _extract_archive(archive, extract_to)
         _link_binaries(tool, extract_to, tool_dir)
+        if digest:
+            (tool_dir / ".dexmachina-sha256").write_text(digest + "\n", encoding="utf-8")
 
     console.print(f"[green]✓[/] {tool.display_name} installed at {tool_dir}")
 

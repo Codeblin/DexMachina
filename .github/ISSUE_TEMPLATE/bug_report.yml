@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a DexMachina failure or regression
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make DexMachina more reliable. Please include enough detail to reproduce the behavior.
+  - type: input
+    id: version
+    attributes:
+      label: DexMachina version
+      description: Run `dexmachina --version` or provide the commit SHA.
+      placeholder: "dexmachina, version 0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Host OS
+      options:
+        - Linux
+        - macOS Intel
+        - macOS Apple Silicon
+        - Windows native
+        - WSL2
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened?
+      description: Include error output where possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: Python version, device/emulator type, rooted status, proxy/VPN/corporate network constraints.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: text

@@ -1,0 +1,61 @@
+name: New tool request
+description: Request a tool for the DexMachina registry
+title: "[Tool]: "
+labels: ["tool-request"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Tool name
+      placeholder: jadx
+    validations:
+      required: true
+  - type: input
+    id: upstream
+    attributes:
+      label: Upstream URL
+      placeholder: https://github.com/owner/project
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - dynamic_analysis
+        - static_analysis
+        - traffic_interception
+        - device_adb
+        - apk_manipulation
+        - automated_scanners
+        - data_storage
+        - network
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install source
+      options:
+        - PyPI
+        - GitHub Releases
+        - Direct vendor archive
+        - npm
+        - apt/brew
+        - Git clone/source zip
+        - Manual only
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Why should DexMachina include it?
+      description: Describe the Android security workflow it supports.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Checksums or signatures
+      description: Link to upstream-published hashes, signatures, or release verification docs if available.

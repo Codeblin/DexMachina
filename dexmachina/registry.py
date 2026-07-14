@@ -31,6 +31,9 @@ class Tool:
     # Direct download archive URL for install_method="direct". {platform} expands
     # to windows/linux/darwin (see installer._platform_download_key).
     download_url_template: str | None = None
+    # Optional SHA-256 digest for direct downloads. A mapping may be used when
+    # each platform archive has a different digest.
+    download_sha256: str | dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +49,7 @@ class Tool:
             "pin_with": list(self.pin_with),
             "frida_server": self.frida_server,
             "notes": self.notes,
+            "download_sha256": self.download_sha256,
         }
 
 

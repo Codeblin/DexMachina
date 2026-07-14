@@ -1,8 +1,43 @@
 # DexMachina
 
+[![CI](https://github.com/Codeblin/dexmachina/actions/workflows/ci.yml/badge.svg)](https://github.com/Codeblin/dexmachina/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
+[![Security policy](https://img.shields.io/badge/security-policy-green)](SECURITY.md)
+
 **Android pentest environment manager** — install, sync, diagnose, and repair your entire mobile security toolkit from one CLI.
 
 DexMachina is evolving from a tool manager into a full **Android penetration environment**: one command to get adb, frida, jadx, apktool, and the rest of your kit installed, version-locked, and working together. It solves dependency hell — tools like `objection`, `r2frida`, and `frida-tools` all require the exact same `frida` version, and `apktool` needs a compatible JDK.
+
+## Why DexMachina
+
+Most Android pentest setups grow from shell history, old notes, and a handful of one-off install scripts. DexMachina turns that into a repo-local, reproducible environment: curated profiles, version pins, a lockfile, Frida runtime isolation, device readiness checks, and `doctor`/`fix` when the setup drifts.
+
+It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineering judgment. It is the glue layer that gets a consistent workstation and rooted emulator/device ready faster than rebuilding the same adb/frida/objection/jadx setup for every engagement.
+
+## Trust and Support
+
+- Trust model: [THREAT_MODEL.md](THREAT_MODEL.md)
+- Vulnerability reporting: [SECURITY.md](SECURITY.md)
+- Contributing and adding tools: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Release history: [CHANGELOG.md](CHANGELOG.md)
+
+### Support matrix
+
+| Host | Status | Notes |
+| --- | --- | --- |
+| Ubuntu/Debian Linux | Supported in CI | Primary development target; `apt` helpers expect Debian-style systems. |
+| macOS Intel/Apple Silicon | Supported in CI | Homebrew-backed tools require `brew`. |
+| Windows native | Unit-tested in CI | Core CLI paths are tested; some upstream tools have limited Windows support. |
+| WSL2 | Not officially supported yet | Often works for host-only commands, but USB/emulator workflows need manual validation. |
+
+### Known good device setups
+
+| Setup | Status |
+| --- | --- |
+| Stock AVD | CI smoke-tested for adb/emulator basics |
+| Rooted AVD | Planned Frida-ready integration coverage |
+| Genymotion | Expected to work, needs published validation |
+| Corellium | Expected to work, needs published validation |
 
 ## Install
 

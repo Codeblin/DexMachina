@@ -7,7 +7,7 @@ import pytest
 from dexmachina import installer
 from dexmachina.config import META_KEY
 from dexmachina.installer import InstallError, install_tools
-from dexmachina.registry import get_tool
+from dexmachina.registry import Tool, get_tool
 
 
 def _cfg(root: Path) -> dict:
@@ -40,8 +40,9 @@ def test_install_direct_downloads_and_links(tmp_path, monkeypatch):
     cfg = _cfg(tmp_path)
     captured = {}
 
-    def fake_download(url, dest, progress=None):
+    def fake_download(url, dest, progress=None, *, expected_sha256=None):
         captured["url"] = url
+        captured["sha256"] = expected_sha256
         dest.write_bytes(b"fake-zip")
 
     def fake_extract(archive, dest):
@@ -57,6 +58,79 @@ def test_install_direct_downloads_and_links(tmp_path, monkeypatch):
     assert "platform-tools-latest-linux.zip" in captured["url"]
     bin_dir = tmp_path / ".dexmachina" / "tools" / "adb" / "bin"
     assert (bin_dir / "adb").is_file()
+
+
+def test_install_direct_passes_platform_checksum(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    expected = "0" * 64
+    tool = Tool(
+        name="sample",
+        display_name="Sample",
+        category="device_adb",
+        install_method="direct",
+        download_url_template="https://example.invalid/sample-{platform}.zip",
+        download_sha256={"linux": expected},
+        binary_name="sample",
+    )
+    captured = {}
+
+    def fake_download(url, dest, progress=None, *, expected_sha256=None):
+        captured["url"] = url
+        captured["sha256"] = expected_sha256
+        dest.write_bytes(b"fake-zip")
+
+    def fake_extract(archive, dest):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "sample").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    monkeypatch.setattr(installer, "detect_platform", lambda: "linux")
+    monkeypatch.setattr(installer, "_download_file", fake_download)
+    monkeypatch.setattr(installer, "_extract_archive", fake_extract)
+
+    installer._install_direct(tool, cfg)
+
+    assert captured["url"].endswith("sample-linux.zip")
+    assert captured["sha256"] == expected
+
+
+def test_download_file_rejects_checksum_mismatch(tmp_path, monkeypatch):
+    class Response:
+        headers = {"content-length": "3"}
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            yield b"bad"
+
+    monkeypatch.setattr(installer.requests, "get", lambda *args, **kwargs: Response())
+
+    dest = tmp_path / "artifact.zip"
+    with pytest.raises(installer.DownloadVerificationError, match="Checksum mismatch"):
+        installer._download_file("https://example.invalid/a.zip", dest, expected_sha256="0" * 64)
+
+    assert not dest.exists()
+    assert not (tmp_path / "artifact.zip.part").exists()
+
+
+def test_download_file_rejects_short_body(tmp_path, monkeypatch):
+    class Response:
+        headers = {"content-length": "4"}
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            yield b"bad"
+
+    monkeypatch.setattr(installer.requests, "get", lambda *args, **kwargs: Response())
+
+    dest = tmp_path / "artifact.zip"
+    with pytest.raises(installer.DownloadVerificationError, match="Incomplete download"):
+        installer._download_file("https://example.invalid/a.zip", dest)
+
+    assert not dest.exists()
+    assert not (tmp_path / "artifact.zip.part").exists()
 
 
 def test_find_executable_prefers_exact_stem(tmp_path):
