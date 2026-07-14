@@ -146,8 +146,36 @@ jobs:
             -cores 2 \
             $ACCEL_FLAG \
             > emulator.log 2>&1 &
+          EMULATOR_PID=$!
+          echo "Started emulator process pid=$EMULATOR_PID with $ACCEL_FLAG"
+          sleep 10
+          ps -p "$EMULATOR_PID" -o pid,stat,cmd || true
+          tail -80 emulator.log || true
 
-          if ! timeout 300 adb wait-for-device; then
+          device_seen=""
+          for attempt in {1..60}; do
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+              echo "::error::Emulator process exited before adb detected a device"
+              tail -200 emulator.log || true
+              exit 1
+            fi
+
+            adb_devices="$(adb devices -l || true)"
+            echo "$adb_devices"
+            if echo "$adb_devices" | awk 'NR > 1 && $2 == "device" { found=1 } END { exit(found ? 0 : 1) }'; then
+              device_seen="1"
+              break
+            fi
+
+            if [ $((attempt % 6)) -eq 0 ]; then
+              echo "Waiting for adb device... attempt $attempt/60"
+              ps -p "$EMULATOR_PID" -o pid,stat,cmd || true
+              tail -80 emulator.log || true
+            fi
+            sleep 5
+          done
+
+          if [ "$device_seen" != "1" ]; then
             echo "::error::Emulator did not appear to adb within 5 minutes"
             adb devices -l || true
             tail -200 emulator.log || true
