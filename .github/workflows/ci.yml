@@ -38,7 +38,6 @@ jobs:
   android-tools-smoke:
     name: Android tools smoke test
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - name: Check out repository
         shell: bash
