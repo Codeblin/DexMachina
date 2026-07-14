@@ -63,3 +63,67 @@ jobs:
           adb version
           dexmachina --no-banner status --offline
           dexmachina --no-banner device list
+
+  emulator-integration:
+    name: Rooted emulator integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
+
+      - name: Install package
+        shell: bash
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install Android emulator image
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            "platform-tools" \
+            "emulator" \
+            "system-images;android-35;default;x86_64"
+          echo no | avdmanager create avd \
+            --force \
+            --name dexmachina-ci \
+            --package "system-images;android-35;default;x86_64" \
+            --device pixel_6
+
+      - name: Boot emulator
+        shell: bash
+        run: |
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd dexmachina-ci \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -gpu swiftshader_indirect \
+            -no-snapshot \
+            > emulator.log 2>&1 &
+          adb wait-for-device
+          booted=""
+          for _ in {1..90}; do
+            booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+            if [ "$booted" = "1" ]; then
+              break
+            fi
+            sleep 5
+          done
+          test "$booted" = "1"
+          adb root || true
+          adb wait-for-device
+          adb shell id
+
+      - name: Run DexMachina emulator smoke
+        shell: bash
+        run: |
+          dexmachina --no-banner up --profile minimal --yes
+          dexmachina --no-banner device list
+          dexmachina --no-banner device ready
+          dexmachina frida-ps -U

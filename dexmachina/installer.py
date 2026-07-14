@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -389,9 +390,9 @@ def _sha256_file(path: Path) -> str:
 
 
 def _verify_sha256(path: Path, expected: str | None) -> str | None:
-    if not expected:
-        return None
     actual = _sha256_file(path)
+    if not expected:
+        return actual
     if actual.lower() != expected.lower():
         raise DownloadVerificationError(
             f"Checksum mismatch for {path.name}:\n"
@@ -408,6 +409,31 @@ def _expected_download_sha256(tool: Tool, platform_key: str) -> str | None:
     if isinstance(expected, dict):
         return expected.get(platform_key)
     return expected
+
+
+def _install_metadata_path(tool_dir: Path) -> Path:
+    return tool_dir / ".dexmachina-install.json"
+
+
+def _write_install_metadata(
+    tool_dir: Path,
+    *,
+    source_url: str,
+    sha256_digest: str,
+    verified: bool,
+    version: str | None = None,
+) -> None:
+    metadata = {
+        "source_url": source_url,
+        "sha256": sha256_digest,
+        "verified": verified,
+    }
+    if version:
+        metadata["version"] = version
+    _install_metadata_path(tool_dir).write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _download_file(
@@ -479,14 +505,85 @@ def _find_asset(release: dict, pattern: str | None, version: str) -> dict | None
     return None
 
 
+def _find_checksum_asset(release: dict, artifact_name: str) -> dict | None:
+    """Find a checksum asset that likely covers artifact_name."""
+    assets = release.get("assets", [])
+    exact_names = {
+        f"{artifact_name}.sha256",
+        f"{artifact_name}.sha256sum",
+        f"{artifact_name}.sha256.txt",
+    }
+    for asset in assets:
+        if asset.get("name") in exact_names:
+            return asset
+
+    checksum_tokens = ("sha256", "checksum", "checksums", "shasums")
+    text_suffixes = (".txt", ".sha256", ".sha256sum", ".checksums", "SHA256SUMS")
+    for asset in assets:
+        name = str(asset.get("name", ""))
+        lower = name.lower()
+        if any(token in lower for token in checksum_tokens):
+            return asset
+        if name.endswith(text_suffixes):
+            return asset
+    return None
+
+
+def _parse_checksum_text(text: str, artifact_name: str) -> str | None:
+    """Parse common SHA-256 checksum file formats."""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        normalized = line.replace("*", " ")
+        parts = normalized.split()
+        hashes = [p for p in parts if len(p) == 64 and all(c in "0123456789abcdefABCDEF" for c in p)]
+        if not hashes:
+            continue
+        if artifact_name in parts or any(part.endswith("/" + artifact_name) for part in parts):
+            return hashes[0]
+        if len(parts) == 1:
+            return hashes[0]
+    return None
+
+
+def _fetch_release_checksum(release: dict, artifact_name: str) -> str | None:
+    checksum_asset = _find_checksum_asset(release, artifact_name)
+    if not checksum_asset:
+        return None
+    url = checksum_asset.get("browser_download_url")
+    if not url:
+        return None
+    try:
+        resp = requests.get(url, headers=github_headers(), timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+    return _parse_checksum_text(resp.text, artifact_name)
+
+
 def _extract_archive(archive: Path, dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
+    dest_root = dest.resolve()
+
+    def safe_path(member_name: str) -> Path:
+        target = (dest / member_name).resolve()
+        if target != dest_root and dest_root not in target.parents:
+            raise InstallError(
+                f"Refusing to extract unsafe archive member outside destination: {member_name}"
+            )
+        return target
+
     name = archive.name.lower()
     if name.endswith(".zip"):
         with zipfile.ZipFile(archive, "r") as zf:
+            for member in zf.infolist():
+                safe_path(member.filename)
             zf.extractall(dest)
     elif name.endswith((".tar.gz", ".tgz")):
         with tarfile.open(archive, "r:gz") as tf:
+            for member in tf.getmembers():
+                safe_path(member.name)
             tf.extractall(dest)
     else:
         shutil.copy(archive, dest / archive.name)
@@ -502,6 +599,8 @@ def _install_direct(
     tool: Tool,
     cfg: dict,
     progress: Progress | None = None,
+    *,
+    expected_sha256: str | None = None,
 ) -> None:
     """Install a tool from a direct archive URL (e.g. Google platform-tools)."""
     if not tool.download_url_template:
@@ -509,7 +608,7 @@ def _install_direct(
 
     platform_key = _platform_download_key()
     url = tool.download_url_template.format(platform=platform_key)
-    expected_sha256 = _expected_download_sha256(tool, platform_key)
+    expected_sha256 = expected_sha256 or _expected_download_sha256(tool, platform_key)
     inst = install_dir(cfg)
     tool_dir = inst / tool.name
     tool_dir.mkdir(parents=True, exist_ok=True)
@@ -532,7 +631,12 @@ def _install_direct(
         _extract_archive(archive, extract_to)
         _link_binaries(tool, extract_to, tool_dir)
         if digest:
-            (tool_dir / ".dexmachina-sha256").write_text(digest + "\n", encoding="utf-8")
+            _write_install_metadata(
+                tool_dir,
+                source_url=url,
+                sha256_digest=digest,
+                verified=bool(expected_sha256),
+            )
 
     console.print(f"[green]✓[/] {tool.display_name} installed at {tool_dir}")
 
@@ -542,6 +646,8 @@ def _install_github_release(
     version: str | None,
     cfg: dict,
     progress: Progress | None = None,
+    *,
+    expected_sha256: str | None = None,
 ) -> None:
     if not tool.github_repo:
         raise InstallError(f"No GitHub repo defined for {tool.name}")
@@ -575,12 +681,26 @@ def _install_github_release(
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             archive = tmp_path / asset["name"]
-            _download_file(asset["browser_download_url"], archive, progress)
+            checksum = expected_sha256 or _fetch_release_checksum(release, asset["name"])
+            digest = _download_file(
+                asset["browser_download_url"],
+                archive,
+                progress,
+                expected_sha256=checksum,
+            )
             extract_to = tool_dir / "extracted"
             if extract_to.exists():
                 shutil.rmtree(extract_to)
             _extract_archive(archive, extract_to)
             _link_binaries(tool, extract_to, tool_dir)
+            if digest:
+                _write_install_metadata(
+                    tool_dir,
+                    source_url=asset["browser_download_url"],
+                    sha256_digest=digest,
+                    verified=bool(checksum),
+                    version=ver,
+                )
     elif tool.name == "medusa":
         raise InstallError(
             "Medusa uses git install — run: dexmachina install medusa"
@@ -699,6 +819,7 @@ def install_tool(
     version: str | None = None,
     force: bool = False,
     progress: Progress | None = None,
+    expected_sha256: str | None = None,
 ) -> None:
     tool = get_tool(tool_name)
 
@@ -729,11 +850,17 @@ def install_tool(
         return
 
     if tool.install_method == "github_release":
-        _install_github_release(tool, target_version, cfg, progress)
+        _install_github_release(
+            tool,
+            target_version,
+            cfg,
+            progress,
+            expected_sha256=expected_sha256,
+        )
         return
 
     if tool.install_method == "direct":
-        _install_direct(tool, cfg, progress)
+        _install_direct(tool, cfg, progress, expected_sha256=expected_sha256)
         return
 
     if tool.install_method == "git":
