@@ -92,6 +92,7 @@ def test_adb_reverse_is_bounded_and_uses_selected_device(monkeypatch):
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(console_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(console_mod, "adb_path", lambda cfg: "adb")
     c.do_adb("reverse tcp:8080 tcp:8080")
 
     argv, kwargs = calls[0]
@@ -108,4 +109,5 @@ def test_adb_reverse_timeout_returns_to_console(monkeypatch):
         raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
 
     monkeypatch.setattr(console_mod.subprocess, "run", timeout)
+    monkeypatch.setattr(console_mod, "adb_path", lambda cfg: "adb")
     assert c.do_adb("reverse tcp:8080 tcp:8080") is None

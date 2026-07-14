@@ -27,5 +27,13 @@ def test_run_passes_flags_to_tool():
     """Flags after the tool name must reach the underlying CLI (not Click)."""
     runner = CliRunner()
     # Before fix, Click rejected unknown options like --version on `run`.
-    result = runner.invoke(main, ["run", "frida", "--version"])
+    with runner.isolated_filesystem():
+        from unittest.mock import patch
+
+        with patch("dexmachina.cli.ensure_config"), patch(
+            "dexmachina.cli.load_config", return_value={}
+        ), patch("dexmachina.cli.run_invocation", return_value=0) as run:
+            result = runner.invoke(main, ["run", "frida", "--version"])
+
     assert result.exit_code == 0
+    run.assert_called_once_with("frida", ["--version"], {})
