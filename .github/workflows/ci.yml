@@ -124,9 +124,17 @@ jobs:
       - name: Boot emulator
         shell: bash
         run: |
+          adb kill-server || true
+          adb start-server
+
+          ACCEL_FLAG="-accel off"
           if [ -e /dev/kvm ]; then
             sudo chown "$USER" /dev/kvm || true
+            if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+              ACCEL_FLAG="-accel on"
+            fi
           fi
+
           nohup "$ANDROID_HOME/emulator/emulator" \
             -avd dexmachina-ci \
             -no-window \
@@ -134,19 +142,45 @@ jobs:
             -no-boot-anim \
             -gpu swiftshader_indirect \
             -no-snapshot \
+            -memory 2048 \
+            -cores 2 \
+            $ACCEL_FLAG \
             > emulator.log 2>&1 &
-          adb wait-for-device
+
+          if ! timeout 300 adb wait-for-device; then
+            echo "::error::Emulator did not appear to adb within 5 minutes"
+            adb devices -l || true
+            tail -200 emulator.log || true
+            exit 1
+          fi
+
           booted=""
-          for _ in {1..90}; do
+          for attempt in {1..120}; do
             booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
             if [ "$booted" = "1" ]; then
               break
             fi
+            if [ $((attempt % 12)) -eq 0 ]; then
+              echo "Waiting for Android boot... attempt $attempt/120"
+              adb devices -l || true
+              tail -40 emulator.log || true
+            fi
             sleep 5
           done
-          test "$booted" = "1"
+
+          if [ "$booted" != "1" ]; then
+            echo "::error::Emulator did not finish booting within 10 minutes"
+            adb devices -l || true
+            adb shell getprop || true
+            tail -200 emulator.log || true
+            exit 1
+          fi
+
           adb root || true
-          adb wait-for-device
+          if ! timeout 120 adb wait-for-device; then
+            echo "::warning::adb did not reconnect after adb root; continuing with current transport"
+            adb devices -l || true
+          fi
           adb shell id
 
       - name: Run DexMachina emulator smoke
