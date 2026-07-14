@@ -104,7 +104,13 @@ jobs:
             mv /tmp/android-commandlinetools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
           fi
 
-          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          set +o pipefail
+          yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          license_status=$?
+          set -o pipefail
+          if [ "$license_status" -ne 0 ]; then
+            exit "$license_status"
+          fi
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install \
             "platform-tools" \
             "emulator" \
