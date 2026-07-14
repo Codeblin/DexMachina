@@ -5,6 +5,9 @@ on:
   push:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
@@ -38,8 +41,8 @@ jobs:
           name: coverage-xml
           path: coverage.xml
 
-  emulator-smoke:
-    name: Emulator smoke test
+  android-tools-smoke:
+    name: Android tools smoke test
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
@@ -55,15 +58,13 @@ jobs:
       - name: Install package
         run: python -m pip install -e ".[dev]"
 
-      - name: Run headless AVD smoke test
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          script: |
-            adb devices
-            dexmachina up --profile minimal --yes
-            dexmachina device list
+      - name: Install adb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y android-tools-adb
+
+      - name: Run adb smoke test
+        run: |
+          adb version
+          dexmachina --no-banner status --offline
+          dexmachina --no-banner device list
