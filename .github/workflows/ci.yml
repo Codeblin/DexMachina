@@ -85,8 +85,12 @@ jobs:
         shell: bash
         run: |
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/android-sdk}}"
+          AVD_HOME="$HOME/.android/avd"
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$AVD_HOME" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
@@ -115,15 +119,28 @@ jobs:
             "platform-tools" \
             "emulator" \
             "system-images;android-35;default;x86_64"
+          mkdir -p "$AVD_HOME"
           echo no | "$AVDMANAGER" --verbose create avd \
             --force \
             --name dexmachina-ci \
             --package "system-images;android-35;default;x86_64" \
-            --device pixel_6
+            --device pixel_6 \
+            --path "$AVD_HOME/dexmachina-ci.avd"
+          "$SDK_ROOT/emulator/emulator" -list-avds
+          ls -la "$HOME/.android" "$AVD_HOME"
 
       - name: Boot emulator
         shell: bash
         run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-}"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx "dexmachina-ci"; then
+            echo "::error::AVD dexmachina-ci was not created or is not visible to emulator"
+            find "$HOME/.android" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
           adb kill-server || true
           adb start-server
 
