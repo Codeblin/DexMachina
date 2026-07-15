@@ -43,10 +43,76 @@ It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineerin
 
 ## Install
 
+### Recommended: pipx
+
+`pipx` installs DexMachina in an isolated environment and exposes the
+`dexmachina` command on your shell `PATH`.
+
+```bash
+python -m pip install --user pipx
+python -m pipx ensurepath
+python -m pipx install dexmachina
+```
+
+Restart your terminal, then verify:
+
+```bash
+dexmachina --help
+```
+
+### PyPI with pip
+
+```bash
+python -m pip install dexmachina
+```
+
+If the install succeeds but `dexmachina` is not found, your Python scripts
+directory is not on `PATH`. You can still run DexMachina as a module:
+
+```bash
+python -m dexmachina --help
+```
+
+Or add the scripts directory printed by pip to your shell `PATH`. Common fixes:
+
+```bash
+# Linux/macOS user installs
+python -m pip install --user dexmachina
+export PATH="$HOME/.local/bin:$PATH"
+
+# Windows PowerShell user installs
+py -m pip install --user dexmachina
+$env:PATH = "$env:APPDATA\Python\Python311\Scripts;$env:PATH"
+```
+
+On Windows, the exact `Python311` part depends on your Python version. If you
+use the Python launcher, this always works even when the console script is not
+on `PATH`:
+
+```powershell
+py -m dexmachina --help
+```
+
+### From GitHub
+
+Install the latest `master` directly:
+
+```bash
+python -m pip install "git+https://github.com/Codeblin/DexMachina.git"
+```
+
+Install a specific release tag:
+
+```bash
+python -m pip install "git+https://github.com/Codeblin/DexMachina.git@v0.1.0"
+```
+
+### Developer install
+
 ```bash
 git clone https://github.com/Codeblin/dexmachina.git
 cd dexmachina
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 ```
 
 Run via the installed entrypoint or as a module:
