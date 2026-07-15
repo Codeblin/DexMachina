@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -14,15 +15,29 @@ except ImportError:  # pragma: no cover
 import tomli_w
 
 from dexmachina import __version__
-from dexmachina.config import config_root, get_setting
+from dexmachina.config import config_root, get_setting, install_dir
 from dexmachina.registry import TOOLS, get_tool
 
 LOCK_NAME = "dexmachina.lock.toml"
+INSTALL_METADATA_NAME = ".dexmachina-install.json"
 
 
 def lock_path(config: dict) -> Path:
     """Lockfile sits next to the config (repo root for project configs)."""
     return config_root(config) / LOCK_NAME
+
+
+def _read_install_metadata(config: dict, tool_name: str) -> dict[str, Any] | None:
+    path = install_dir(config) / tool_name / INSTALL_METADATA_NAME
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
 
 
 def build_lock(config: dict) -> dict[str, Any]:
@@ -36,7 +51,16 @@ def build_lock(config: dict) -> dict[str, Any]:
             continue
         version = get_tool_version(tool, config)
         if version:
-            tools[name] = {"version": version, "method": tool.install_method}
+            entry: dict[str, Any] = {"version": version, "method": tool.install_method}
+            metadata = _read_install_metadata(config, name)
+            if metadata and metadata.get("sha256"):
+                entry["integrity"] = {
+                    "sha256": str(metadata["sha256"]),
+                    "verified": bool(metadata.get("verified")),
+                }
+                if metadata.get("source_url"):
+                    entry["source_url"] = str(metadata["source_url"])
+            tools[name] = entry
 
     lock: dict[str, Any] = {
         "meta": {
@@ -107,9 +131,15 @@ def restore_from_lock(config: dict, lock: dict[str, Any]) -> tuple[list[str], li
             # Provided by the frida venv already.
             continue
         version = info.get("version") if isinstance(info, dict) else None
+        integrity = info.get("integrity", {}) if isinstance(info, dict) else {}
+        expected_sha256 = (
+            integrity.get("sha256")
+            if isinstance(integrity, dict) and tool.install_method in ("direct", "github_release")
+            else None
+        )
         try:
             pin = version if tool.install_method in ("pip", "github_release") else None
-            install_tool(name, config, version=pin)
+            install_tool(name, config, version=pin, expected_sha256=expected_sha256)
             restored.append(f"{name} {version or ''}".strip())
         except InstallError as e:
             failures.append((name, str(e)))

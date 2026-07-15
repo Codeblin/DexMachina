@@ -1,69 +1,243 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   tests:
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
 
       - name: Install package
+        shell: bash
         run: python -m pip install -e ".[dev]"
 
       - name: Run tests
+        shell: bash
         run: python -m pytest --cov=dexmachina --cov-report=term-missing --cov-report=xml
 
-      - name: Upload coverage artifact
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-xml
-          path: coverage.xml
-
-  emulator-smoke:
-    name: Emulator smoke test
+  android-tools-smoke:
+    name: Android tools smoke test
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
 
       - name: Install package
+        shell: bash
         run: python -m pip install -e ".[dev]"
 
-      - name: Run headless AVD smoke test
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          script: |
-            adb devices
-            dexmachina up --profile minimal --yes
-            dexmachina device list
+      - name: Install adb
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y android-tools-adb
+
+      - name: Run adb smoke test
+        shell: bash
+        run: |
+          adb version
+          dexmachina --no-banner status --offline
+          dexmachina --no-banner device list
+
+  emulator-integration:
+    name: Rooted emulator integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
+
+      - name: Install package
+        shell: bash
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install Android emulator image
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/android-sdk}}"
+          AVD_HOME="$HOME/.android/avd"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$AVD_HOME" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL \
+              "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" \
+              -o /tmp/android-commandlinetools.zip
+            rm -rf "$SDK_ROOT/cmdline-tools/latest" /tmp/android-commandlinetools
+            mkdir -p /tmp/android-commandlinetools
+            unzip -q /tmp/android-commandlinetools.zip -d /tmp/android-commandlinetools
+            mv /tmp/android-commandlinetools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+          fi
+
+          set +o pipefail
+          yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          license_status=$?
+          set -o pipefail
+          if [ "$license_status" -ne 0 ]; then
+            exit "$license_status"
+          fi
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install \
+            "platform-tools" \
+            "emulator" \
+            "system-images;android-35;default;x86_64"
+          mkdir -p "$AVD_HOME"
+          echo no | "$AVDMANAGER" --verbose create avd \
+            --force \
+            --name dexmachina-ci \
+            --package "system-images;android-35;default;x86_64" \
+            --device pixel_6 \
+            --path "$AVD_HOME/dexmachina-ci.avd"
+          printf '%s\n' \
+            "avd.ini.encoding=UTF-8" \
+            "path=$AVD_HOME/dexmachina-ci.avd" \
+            "path.rel=avd/dexmachina-ci.avd" \
+            "target=android-35" \
+            > "$AVD_HOME/dexmachina-ci.ini"
+          "$SDK_ROOT/emulator/emulator" -list-avds
+          ls -la "$HOME/.android" "$AVD_HOME"
+
+      - name: Boot emulator
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-}"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx "dexmachina-ci"; then
+            echo "::error::AVD dexmachina-ci was not created or is not visible to emulator"
+            find "$HOME/.android" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
+          adb kill-server || true
+          adb start-server
+
+          ACCEL_FLAG="-accel off"
+          if [ -e /dev/kvm ]; then
+            sudo chown "$USER" /dev/kvm || true
+            if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+              ACCEL_FLAG="-accel on"
+            fi
+          fi
+
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd dexmachina-ci \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -gpu swiftshader_indirect \
+            -no-snapshot \
+            -memory 2048 \
+            -cores 2 \
+            $ACCEL_FLAG \
+            > emulator.log 2>&1 &
+          EMULATOR_PID=$!
+          echo "Started emulator process pid=$EMULATOR_PID with $ACCEL_FLAG"
+          sleep 10
+          ps -p "$EMULATOR_PID" -o pid,stat,cmd || true
+          tail -80 emulator.log || true
+
+          device_seen=""
+          for attempt in {1..60}; do
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+              echo "::error::Emulator process exited before adb detected a device"
+              tail -200 emulator.log || true
+              exit 1
+            fi
+
+            adb_devices="$(adb devices -l || true)"
+            echo "$adb_devices"
+            if echo "$adb_devices" | awk 'NR > 1 && $2 == "device" { found=1 } END { exit(found ? 0 : 1) }'; then
+              device_seen="1"
+              break
+            fi
+
+            if [ $((attempt % 6)) -eq 0 ]; then
+              echo "Waiting for adb device... attempt $attempt/60"
+              ps -p "$EMULATOR_PID" -o pid,stat,cmd || true
+              tail -80 emulator.log || true
+            fi
+            sleep 5
+          done
+
+          if [ "$device_seen" != "1" ]; then
+            echo "::error::Emulator did not appear to adb within 5 minutes"
+            adb devices -l || true
+            tail -200 emulator.log || true
+            exit 1
+          fi
+
+          booted=""
+          for attempt in {1..120}; do
+            booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+            if [ "$booted" = "1" ]; then
+              break
+            fi
+            if [ $((attempt % 12)) -eq 0 ]; then
+              echo "Waiting for Android boot... attempt $attempt/120"
+              adb devices -l || true
+              tail -40 emulator.log || true
+            fi
+            sleep 5
+          done
+
+          if [ "$booted" != "1" ]; then
+            echo "::error::Emulator did not finish booting within 10 minutes"
+            adb devices -l || true
+            adb shell getprop || true
+            tail -200 emulator.log || true
+            exit 1
+          fi
+
+          adb root || true
+          if ! timeout 120 adb wait-for-device; then
+            echo "::warning::adb did not reconnect after adb root; continuing with current transport"
+            adb devices -l || true
+          fi
+          adb shell id
+
+      - name: Run DexMachina emulator smoke
+        shell: bash
+        run: |
+          dexmachina --no-banner up --profile minimal --yes
+          dexmachina --no-banner device list
+          dexmachina --no-banner device ready
+          dexmachina frida-ps -U

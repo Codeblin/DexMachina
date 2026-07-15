@@ -36,6 +36,33 @@ def test_build_and_roundtrip_lock(tmp_path, monkeypatch):
     assert lock["meta"]["profile"] == "minimal"
 
 
+def test_lock_includes_install_integrity_metadata(tmp_path, monkeypatch):
+    def fake_version(tool, config=None):
+        return {"adb": "1.0.41"}.get(tool.name)
+
+    cfg = _cfg(tmp_path)
+    meta_dir = tmp_path / ".dexmachina" / "tools" / "adb"
+    meta_dir.mkdir(parents=True)
+    (meta_dir / ".dexmachina-install.json").write_text(
+        """{
+  "source_url": "https://example.invalid/platform-tools.zip",
+  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "verified": true
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dexmachina.installer.get_tool_version", fake_version)
+    monkeypatch.setattr("dexmachina.versions.get_active_frida_version", lambda _c: None)
+
+    lock = lockfile.build_lock(cfg)
+
+    assert lock["tools"]["adb"]["integrity"]["sha256"] == "a" * 64
+    assert lock["tools"]["adb"]["integrity"]["verified"] is True
+    assert lock["tools"]["adb"]["source_url"] == "https://example.invalid/platform-tools.zip"
+
+
 def test_read_lock_missing_returns_none(tmp_path):
     assert lockfile.read_lock(_cfg(tmp_path)) is None
 
@@ -62,8 +89,16 @@ def test_restore_skips_frida_pip_members(tmp_path, monkeypatch):
 
     installed: list[tuple[str, str | None]] = []
 
-    def fake_install(name, config, *, version=None, force=False, progress=None):
-        installed.append((name, version))
+    def fake_install(
+        name,
+        config,
+        *,
+        version=None,
+        force=False,
+        progress=None,
+        expected_sha256=None,
+    ):
+        installed.append((name, version, expected_sha256))
 
     monkeypatch.setattr("dexmachina.versions.use_frida_version", fake_use)
     monkeypatch.setattr("dexmachina.installer.install_tool", fake_install)
@@ -72,9 +107,42 @@ def test_restore_skips_frida_pip_members(tmp_path, monkeypatch):
 
     assert used["frida"] == "17.9.6"
     # frida/objection are pip members of the frida group → provided by venv, skipped.
-    installed_names = [n for n, _ in installed]
+    installed_names = [n for n, _, _ in installed]
     assert "frida" not in installed_names
     assert "objection" not in installed_names
-    assert ("jadx", "1.5.0") in installed
+    assert ("jadx", "1.5.0", None) in installed
     assert failures == []
     assert any("jadx" in r for r in restored)
+
+
+def test_restore_passes_locked_sha256_for_release_tools(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    lock = {
+        "tools": {
+            "jadx": {
+                "version": "1.5.0",
+                "method": "github_release",
+                "integrity": {"sha256": "b" * 64, "verified": True},
+            },
+        },
+    }
+    installed: list[tuple[str, str | None, str | None]] = []
+
+    def fake_install(
+        name,
+        config,
+        *,
+        version=None,
+        force=False,
+        progress=None,
+        expected_sha256=None,
+    ):
+        installed.append((name, version, expected_sha256))
+
+    monkeypatch.setattr("dexmachina.installer.install_tool", fake_install)
+
+    restored, failures = lockfile.restore_from_lock(cfg, lock)
+
+    assert restored == ["jadx 1.5.0"]
+    assert failures == []
+    assert installed == [("jadx", "1.5.0", "b" * 64)]
