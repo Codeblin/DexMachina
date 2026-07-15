@@ -169,6 +169,25 @@ def test_download_file_rejects_short_body(tmp_path, monkeypatch):
     assert not (tmp_path / "artifact.zip.part").exists()
 
 
+def test_download_file_allows_decoded_body_larger_than_content_length(tmp_path, monkeypatch):
+    class Response:
+        headers = {"content-length": "3"}
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            yield b"abcd"
+
+    monkeypatch.setattr(installer.requests, "get", lambda *args, **kwargs: Response())
+
+    dest = tmp_path / "artifact.zip"
+    digest = installer._download_file("https://example.invalid/a.zip", dest)
+
+    assert dest.read_bytes() == b"abcd"
+    assert digest == "88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589"
+
+
 def test_download_file_returns_digest_without_expected_hash(tmp_path, monkeypatch):
     class Response:
         headers = {"content-length": "3"}

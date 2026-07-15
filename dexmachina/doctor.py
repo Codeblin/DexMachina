@@ -12,11 +12,11 @@ from rich.panel import Panel
 from dexmachina.banner import doctor_table
 from dexmachina.config import get_pinned_version
 from dexmachina.progress import work_progress
-from dexmachina.device import check_frida_server_running, frida_server_status, get_local_frida_version, list_devices
+from dexmachina.device import DeviceError, check_frida_server_running, frida_server_status, get_local_frida_version, list_devices
 from dexmachina.config import install_dir
 from dexmachina.installer import get_tool_version, warm_version_cache
 from dexmachina.registry import FRIDA_PIN_GROUP, TOOLS, get_tool
-from dexmachina.runtime import _find_binary_in_dir, collect_tool_bin_paths
+from dexmachina.runtime import _find_binary_in_dir, build_run_env, collect_tool_bin_paths
 from dexmachina.utils import (
     PROBE_CMD_TIMEOUT,
     normalize_pkg_name,
@@ -68,14 +68,6 @@ def check_java() -> CheckResult:
 
 
 def check_adb(config: dict) -> CheckResult:
-    adb = config.get("settings", {}).get("adb_path", "adb")
-    if not which(adb) and not which("adb"):
-        return CheckResult(
-            "ADB",
-            "fail",
-            "Not found in PATH",
-            "dexmachina install adb",
-        )
     try:
         devices = list_devices(config)
         if devices:
@@ -87,7 +79,7 @@ def check_adb(config: dict) -> CheckResult:
             "Connect a device with USB debugging enabled",
             automated=False,
         )
-    except Exception as e:
+    except DeviceError as e:
         return CheckResult("ADB", "fail", str(e), "dexmachina install adb")
 
 
@@ -181,7 +173,7 @@ def check_frida_server_match(config: dict) -> CheckResult:
         )
 
     try:
-        local = get_local_frida_version()
+        local = get_local_frida_version(config)
     except Exception as e:
         return CheckResult("Frida server", "warn", f"Local frida not installed: {e}")
 
@@ -211,7 +203,7 @@ def check_frida_server_match(config: dict) -> CheckResult:
         )
 
     # Best-effort: if frida-ps works, versions likely match
-    result = run_cmd("frida-ps -U", timeout=PROBE_CMD_TIMEOUT)
+    result = run_cmd("frida-ps -U", env=build_run_env(config), timeout=PROBE_CMD_TIMEOUT)
     if result.returncode == 0:
         return CheckResult(
             "Frida server",

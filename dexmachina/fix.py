@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from dexmachina.config import get_pinned_version, is_ignored
+from dexmachina.config import config_path_of, get_pinned_version, is_ignored, load_config
 from dexmachina.device import push_frida_server
 from dexmachina.doctor import CheckResult, run_doctor
 from dexmachina.installer import (
@@ -512,6 +512,7 @@ def run_fix(
             console.print(f"  [yellow]▸[/] {line}")
 
     console.print("\n[bold cyan]Phase 3:[/] Re-checking environment…")
+    config = load_config(config_path_of(config))
     post_checks = run_doctor(config)
     remaining = [c for c in post_checks if c.status in ("fail", "warn")]
 
