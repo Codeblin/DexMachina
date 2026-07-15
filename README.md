@@ -49,6 +49,16 @@ It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineerin
 `dexmachina` command on your shell `PATH`.
 
 ```bash
+# Kali/Debian/Ubuntu
+sudo apt update
+sudo apt install -y pipx
+pipx ensurepath
+pipx install dexmachina
+```
+
+On other Python installs where `pipx` is not packaged by the OS:
+
+```bash
 python -m pip install --user pipx
 python -m pipx ensurepath
 python -m pipx install dexmachina
@@ -65,6 +75,20 @@ dexmachina --help
 ```bash
 python -m pip install dexmachina
 ```
+
+On Kali, Debian 12+, Ubuntu 23.04+, and other PEP 668 distributions, system
+Python may reject this with `externally-managed-environment`. Use `pipx`
+instead, or install inside a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install dexmachina
+dexmachina --help
+```
+
+Avoid `--break-system-packages` unless you intentionally want to modify the OS
+Python environment.
 
 If the install succeeds but `dexmachina` is not found, your Python scripts
 directory is not on `PATH`. You can still run DexMachina as a module:
@@ -143,6 +167,16 @@ dexmachina shell                # …or a raw subshell with every tool on PATH
 
 Inside `dexmachina shell`, tools like `jadx`, `apktool`, `objection`, and
 `frida` are directly on your `PATH`. Type `exit` to leave.
+
+If `doctor` or `fix` reports that a managed tool is installed but not on your
+shell `PATH`, use DexMachina's managed environment instead of editing global
+shell startup files:
+
+```bash
+dexmachina shell
+# or:
+eval "$(dexmachina env)"
+```
 
 ## Pentest a rooted emulator — full walkthrough
 
@@ -433,6 +467,15 @@ DexMachina aims to become a batteries-included Android pentest environment:
 ## GitHub API
 
 Release versions are fetched from the GitHub Releases API with a 1-hour cache in `~/.dexmachina/cache/`. Set `GITHUB_TOKEN` to avoid rate limits.
+
+On Kali or shared networks you may hit unauthenticated GitHub API limits during
+`dexmachina up`, `install`, or `fix --bootstrap`. Create a fine-grained GitHub
+token with read-only public repository access and export it before retrying:
+
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+dexmachina fix --bootstrap
+```
 
 ## Development
 

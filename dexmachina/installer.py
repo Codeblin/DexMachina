@@ -57,6 +57,17 @@ class DownloadVerificationError(InstallError):
 _latest_version_cache: dict[str, str | None] = {}
 
 
+def _request_error_message(error: requests.RequestException) -> str:
+    message = str(error)
+    response = getattr(error, "response", None)
+    if response is not None and response.status_code == 403 and "rate limit" in message.lower():
+        message += (
+            "\nGitHub API rate limit exceeded. Set GITHUB_TOKEN to a GitHub token "
+            "with public_repo/read-only access, then retry."
+        )
+    return message
+
+
 def _merged_pip_versions(config: dict | None) -> dict[str, str]:
     versions = load_pip_package_versions()
     if not config:
@@ -462,7 +473,7 @@ def _download_file(
                 if progress and task is not None:
                     progress.update(task, advance=len(chunk))
 
-    if total and written != total:
+    if total and written < total:
         partial.unlink(missing_ok=True)
         raise DownloadVerificationError(
             f"Incomplete download for {dest.name}: expected {total} bytes, got {written}."
@@ -660,7 +671,9 @@ def _install_github_release(
                 url = f"https://api.github.com/repos/{tool.github_repo}/releases/tags/{version}"
                 release = requests.get(url, headers=github_headers(), timeout=30).json()
         except requests.RequestException as e:
-            raise InstallError(f"Failed to fetch release {version} for {tool.name}: {e}") from e
+            raise InstallError(
+                f"Failed to fetch release {version} for {tool.name}: {_request_error_message(e)}"
+            ) from e
         ver = version.lstrip("v")
     else:
         try:
@@ -668,7 +681,7 @@ def _install_github_release(
         except requests.RequestException as e:
             raise InstallError(
                 f"Could not fetch latest release for {tool.display_name} "
-                f"(github.com/{tool.github_repo}): {e}"
+                f"(github.com/{tool.github_repo}): {_request_error_message(e)}"
             ) from e
         ver = extract_release_version(release)
 

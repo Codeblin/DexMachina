@@ -13,9 +13,9 @@ import requests
 from rich.console import Console
 from rich.progress import Progress
 
-from dexmachina.config import get_setting
+from dexmachina.config import get_setting, install_dir
 from dexmachina.progress import work_spinner
-from dexmachina.utils import PROBE_CMD_TIMEOUT, github_headers, parse_version, run_cmd, which
+from dexmachina.utils import PROBE_CMD_TIMEOUT, detect_platform, github_headers, parse_version, run_cmd, which
 
 console = Console()
 
@@ -45,14 +45,30 @@ class FridaServerStatus:
         return self.user == "root"
 
 
+def _managed_binary(config: dict, tool_name: str, binary_name: str) -> str | None:
+    bin_dir = install_dir(config) / tool_name / "bin"
+    candidates = [binary_name]
+    if detect_platform() == "windows":
+        candidates.extend([f"{binary_name}.exe", f"{binary_name}.bat", f"{binary_name}.cmd"])
+    for candidate in candidates:
+        path = bin_dir / candidate
+        if path.is_file():
+            return str(path)
+    return None
+
+
 def adb_path(config: dict) -> str:
     custom = get_setting(config, "adb_path", "adb")
     if which(custom):
         return custom
     if which("adb"):
         return "adb"
+    managed = _managed_binary(config, "adb", "adb")
+    if managed:
+        return managed
     raise DeviceError(
-        "adb not found. Install platform-tools or set adb_path in dexmachina.toml"
+        "adb not found. Install platform-tools, run `dexmachina shell`, "
+        "or set adb_path in dexmachina.toml"
     )
 
 

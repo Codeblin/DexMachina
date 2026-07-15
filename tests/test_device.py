@@ -4,11 +4,25 @@ from unittest.mock import patch
 
 from dexmachina.device import (
     FridaServerStatus,
+    adb_path,
     device_has_su,
     get_local_frida_version,
     frida_server_user,
     restart_frida_server,
 )
+
+
+def test_adb_path_finds_managed_platform_tools(tmp_path, monkeypatch):
+    tools = tmp_path / ".dexmachina" / "tools"
+    adb = tools / "adb" / "bin" / "adb"
+    adb.parent.mkdir(parents=True)
+    adb.write_text("#!/bin/sh\n", encoding="utf-8")
+    cfg = {"settings": {"adb_path": "adb", "install_dir": str(tools)}}
+
+    monkeypatch.setattr("dexmachina.device.which", lambda _name: None)
+    monkeypatch.setattr("dexmachina.device.detect_platform", lambda: "linux")
+
+    assert adb_path(cfg) == str(adb)
 
 
 def test_device_has_su_true():
