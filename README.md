@@ -35,7 +35,7 @@ It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineerin
 | Setup | Status |
 | --- | --- |
 | Stock AVD | CI smoke-tested for adb/emulator basics |
-| Rooted AVD | Planned Frida-ready integration coverage |
+| Rooted AVD | CI integration job boots an AVD and runs `device ready` + `frida-ps -U` |
 | Genymotion | Expected to work, needs published validation |
 | Corellium | Expected to work, needs published validation |
 
