@@ -5,3 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      python-dev-dependencies:
+        patterns:
+          - pytest*
+      python-runtime-dependencies:
+        patterns:
+          - "*"

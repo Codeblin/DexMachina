@@ -19,6 +19,8 @@ It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineerin
 - Trust model: [THREAT_MODEL.md](THREAT_MODEL.md)
 - Vulnerability reporting: [SECURITY.md](SECURITY.md)
 - Contributing and adding tools: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Release process: [docs/RELEASE.md](docs/RELEASE.md)
+- Branch protection checklist: [.github/BRANCH_PROTECTION.md](.github/BRANCH_PROTECTION.md)
 - Release history: [CHANGELOG.md](CHANGELOG.md)
 
 ### Support matrix

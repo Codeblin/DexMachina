@@ -55,6 +55,8 @@ Tool(
 
 ## Pull Requests
 
+All changes should go through pull requests once branch protection is enabled. See `.github/BRANCH_PROTECTION.md` for the repository settings maintainers should enforce.
+
 Before opening a PR:
 
 ```bash
@@ -64,3 +66,7 @@ dexmachina status --offline
 ```
 
 If your change affects device flows, include the emulator/device setup you tested against, for example rooted AVD, Genymotion, or Corellium.
+
+## Releases
+
+Release tags and PyPI publishing are documented in `docs/RELEASE.md`.

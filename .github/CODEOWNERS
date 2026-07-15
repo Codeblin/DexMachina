@@ -1,0 +1,9 @@
+# Require maintainer review for all repository changes.
+* @Codeblin
+
+# Release, CI, and supply-chain surfaces are especially sensitive.
+/.github/ @Codeblin
+/dexmachina/ @Codeblin
+/pyproject.toml @Codeblin
+/THREAT_MODEL.md @Codeblin
+/SECURITY.md @Codeblin

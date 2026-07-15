@@ -20,9 +20,12 @@ All notable changes to DexMachina are documented here. This project follows Sema
 - Lockfile artifact digest recording and restore-time digest enforcement.
 - Safe archive extraction that rejects path traversal members.
 - Release metadata validation and GitHub release workflow for `v*` tags.
+- PyPI Trusted Publishing workflow using GitHub OIDC and `uv publish`.
+- CODEOWNERS and branch protection checklist.
+- Release process documentation.
 
 ### Known Gaps
 
 - GitHub Release assets are checksum-verified only when upstream publishes a discoverable checksum file or a lockfile digest is available.
 - Signature verification is not implemented yet.
-- PyPI publication is still pending.
+- PyPI project Trusted Publisher configuration still must be completed in PyPI/GitHub settings before the first upload.

@@ -8,14 +8,13 @@ version = "0.1.0"
 description = "Android pentesting tool manager — install, update, and version-lock your toolkit"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "DexMachina Contributors" }]
 keywords = ["android", "pentesting", "frida", "security"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -44,6 +43,8 @@ dexmachina = "dexmachina.cli:main"
 [project.urls]
 Homepage = "https://github.com/Codeblin/dexmachina"
 Repository = "https://github.com/Codeblin/dexmachina"
+Issues = "https://github.com/Codeblin/dexmachina/issues"
+Documentation = "https://github.com/Codeblin/dexmachina#readme"
 Changelog = "https://github.com/Codeblin/dexmachina/blob/main/CHANGELOG.md"
 "Security Policy" = "https://github.com/Codeblin/dexmachina/security/policy"
 
