@@ -1,5 +1,7 @@
 """Tests for direct-download installs and install resilience."""
 
+import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -93,6 +95,40 @@ def test_install_direct_passes_platform_checksum(tmp_path, monkeypatch):
     assert captured["sha256"] == expected
 
 
+def test_install_direct_writes_integrity_metadata(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    expected = "0" * 64
+    digest = "0" * 64
+    tool = Tool(
+        name="sample",
+        display_name="Sample",
+        category="device_adb",
+        install_method="direct",
+        download_url_template="https://example.invalid/sample-{platform}.zip",
+        download_sha256={"linux": expected},
+        binary_name="sample",
+    )
+
+    def fake_download(url, dest, progress=None, *, expected_sha256=None):
+        dest.write_bytes(b"fake-zip")
+        return digest
+
+    def fake_extract(archive, dest):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "sample").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    monkeypatch.setattr(installer, "detect_platform", lambda: "linux")
+    monkeypatch.setattr(installer, "_download_file", fake_download)
+    monkeypatch.setattr(installer, "_extract_archive", fake_extract)
+
+    installer._install_direct(tool, cfg)
+
+    metadata = tmp_path / ".dexmachina" / "tools" / "sample" / ".dexmachina-install.json"
+    text = metadata.read_text(encoding="utf-8")
+    assert '"sha256": "0000000000000000000000000000000000000000000000000000000000000000"' in text
+    assert '"verified": true' in text
+
+
 def test_download_file_rejects_checksum_mismatch(tmp_path, monkeypatch):
     class Response:
         headers = {"content-length": "3"}
@@ -131,6 +167,73 @@ def test_download_file_rejects_short_body(tmp_path, monkeypatch):
 
     assert not dest.exists()
     assert not (tmp_path / "artifact.zip.part").exists()
+
+
+def test_download_file_returns_digest_without_expected_hash(tmp_path, monkeypatch):
+    class Response:
+        headers = {"content-length": "3"}
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            yield b"abc"
+
+    monkeypatch.setattr(installer.requests, "get", lambda *args, **kwargs: Response())
+
+    dest = tmp_path / "artifact.zip"
+    digest = installer._download_file("https://example.invalid/a.zip", dest)
+
+    assert digest == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    assert dest.read_bytes() == b"abc"
+
+
+def test_extract_archive_rejects_zip_path_traversal(tmp_path):
+    archive = tmp_path / "evil.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("../evil.txt", "nope")
+
+    with pytest.raises(InstallError, match="unsafe archive member"):
+        installer._extract_archive(archive, tmp_path / "out")
+
+    assert not (tmp_path / "evil.txt").exists()
+
+
+def test_extract_archive_rejects_tar_path_traversal(tmp_path):
+    archive = tmp_path / "evil.tar.gz"
+    payload = tmp_path / "payload.txt"
+    payload.write_text("nope", encoding="utf-8")
+    with tarfile.open(archive, "w:gz") as tf:
+        tf.add(payload, arcname="../evil.txt")
+
+    with pytest.raises(InstallError, match="unsafe archive member"):
+        installer._extract_archive(archive, tmp_path / "out")
+
+    assert not (tmp_path / "evil.txt").exists()
+
+
+def test_parse_checksum_text_matches_artifact_name():
+    digest = "c" * 64
+    text = f"{digest}  jadx-1.5.0.zip\n"
+
+    assert installer._parse_checksum_text(text, "jadx-1.5.0.zip") == digest
+
+
+def test_find_checksum_asset_prefers_exact_artifact_hash():
+    release = {
+        "assets": [
+            {"name": "SHA256SUMS", "browser_download_url": "https://example.invalid/all"},
+            {
+                "name": "jadx-1.5.0.zip.sha256",
+                "browser_download_url": "https://example.invalid/one",
+            },
+        ]
+    }
+
+    asset = installer._find_checksum_asset(release, "jadx-1.5.0.zip")
+
+    assert asset is not None
+    assert asset["browser_download_url"] == "https://example.invalid/one"
 
 
 def test_find_executable_prefers_exact_stem(tmp_path):

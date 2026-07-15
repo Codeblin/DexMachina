@@ -119,11 +119,17 @@ def get_device_arch(config: dict, serial: str | None = None) -> str:
     return arch
 
 
-def get_local_frida_version() -> str:
-    result = run_cmd("frida --version", timeout=PROBE_CMD_TIMEOUT)
+def get_local_frida_version(config: dict | None = None) -> str:
+    env = None
+    if config is not None:
+        from dexmachina.runtime import build_run_env
+
+        env = build_run_env(config)
+
+    result = run_cmd("frida --version", env=env, timeout=PROBE_CMD_TIMEOUT)
     if result.returncode != 0:
         raise DeviceError(
-            "frida not installed locally. Install with: dexmachina install frida"
+            "frida not installed locally. Run: dexmachina use latest"
         )
     ver = parse_version(result.stdout or result.stderr)
     if not ver:
@@ -187,7 +193,7 @@ def push_frida_server(
     remote_path: str = "/data/local/tmp/frida-server",
 ) -> None:
     """Push matching frida-server to device."""
-    frida_ver = get_local_frida_version()
+    frida_ver = get_local_frida_version(config)
     devices = list_devices(config)
 
     if not devices:
