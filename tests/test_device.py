@@ -5,6 +5,7 @@ from unittest.mock import patch
 from dexmachina.device import (
     FridaServerStatus,
     device_has_su,
+    get_local_frida_version,
     frida_server_user,
     restart_frida_server,
 )
@@ -17,6 +18,32 @@ def test_device_has_su_true():
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = "uid=0(root) gid=0(root)"
             assert device_has_su(cfg) is True
+
+
+def test_get_local_frida_version_uses_dexmachina_env(monkeypatch):
+    captured = {}
+
+    def fake_env(config):
+        return {"PATH": "/tmp/frida-venv/bin"}
+
+    def fake_run(cmd, *, env=None, timeout=None, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        captured["timeout"] = timeout
+
+        class Result:
+            returncode = 0
+            stdout = "17.15.5\n"
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("dexmachina.runtime.build_run_env", fake_env)
+    monkeypatch.setattr("dexmachina.device.run_cmd", fake_run)
+
+    assert get_local_frida_version({"active": {"frida": "17.15.5"}}) == "17.15.5"
+    assert captured["cmd"] == "frida --version"
+    assert captured["env"] == {"PATH": "/tmp/frida-venv/bin"}
 
 
 def test_frida_server_user_reads_root_uid():
