@@ -126,6 +126,12 @@ jobs:
             --package "system-images;android-35;default;x86_64" \
             --device pixel_6 \
             --path "$AVD_HOME/dexmachina-ci.avd"
+          printf '%s\n' \
+            "avd.ini.encoding=UTF-8" \
+            "path=$AVD_HOME/dexmachina-ci.avd" \
+            "path.rel=avd/dexmachina-ci.avd" \
+            "target=android-35" \
+            > "$AVD_HOME/dexmachina-ci.ini"
           "$SDK_ROOT/emulator/emulator" -list-avds
           ls -la "$HOME/.android" "$AVD_HOME"
 
