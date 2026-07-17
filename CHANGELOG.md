@@ -2,6 +2,14 @@
 
 All notable changes to PinDroid are documented here. This project follows Semantic Versioning while it is pre-1.0, with minor releases allowed to refine CLI behavior.
 
+## [Unreleased]
+
+### Changed
+
+- Rename the project and maintained package from DexMachina to PinDroid.
+- Add a legacy `dexmachina` transition package for one final inactive PyPI release.
+- Add a migration guide for old installs, scripts, config files, and workspace paths.
+
 
 ## [0.1.1] - 2026-07-15
 

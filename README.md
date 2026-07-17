@@ -4,6 +4,9 @@
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
 [![Security policy](https://img.shields.io/badge/security-policy-green)](SECURITY.md)
 
+> Previously known as DexMachina. See [MIGRATING.md](MIGRATING.md) if you are
+> updating old installs, scripts, or workspace config.
+
 **Android pentest environment manager** — install, sync, diagnose, and repair your entire mobile security toolkit from one CLI.
 
 PinDroid is evolving from a tool manager into a full **Android penetration environment**: one command to get adb, frida, jadx, apktool, and the rest of your kit installed, version-locked, and working together. It solves dependency hell — tools like `objection`, `r2frida`, and `frida-tools` all require the exact same `frida` version, and `apktool` needs a compatible JDK.
@@ -19,6 +22,7 @@ It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineerin
 - Trust model: [THREAT_MODEL.md](THREAT_MODEL.md)
 - Vulnerability reporting: [SECURITY.md](SECURITY.md)
 - Contributing and adding tools: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Rename/migration guide: [MIGRATING.md](MIGRATING.md)
 - Release process: [docs/RELEASE.md](docs/RELEASE.md)
 - Branch protection checklist: [.github/BRANCH_PROTECTION.md](.github/BRANCH_PROTECTION.md)
 - Release history: [CHANGELOG.md](CHANGELOG.md)

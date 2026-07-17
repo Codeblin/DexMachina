@@ -27,11 +27,26 @@ C_DIM = "#3a6652"          # muted green
 C_GLOW = "#39ff14"         # neon
 
 LOGO = r"""
-  ____  _       ____             _     _
- |  _ \(_)_ __ |  _ \ _ __ ___ (_) __| |
- | |_) | | '_ \| | | | '__/ _ \| |/ _` |
- |  __/| | | | | |_| | | | (_) | | (_| |
- |_|   |_|_| |_|____/|_|  \___/|_|\__,_|
+  ____ ___ _   _
+ |  _ \_ _| \ | |
+ | |_) | ||  \| |
+ |  __/| || |\  |
+ |_|  |___|_| \_|
+
+  ____  ____   ___ ___ ____
+ |  _ \|  _ \ / _ \_ _|  _ \
+ | | | | |_) | | | | || | | |
+ | |_| |  _ <| |_| | || |_| |
+ |____/|_| \_\\___/___|____/
+"""
+
+SIGNAL_PANEL = r"""
+   /----------------------\
+   | apk  -> map -> hook  |
+   | adb  :: frida :: js  |
+   | jadx :: apktool      |
+   \----------------------/
+        \__ mobile lab __/
 """
 
 CIRCUIT_FOOTER = (
@@ -54,8 +69,19 @@ def _colorize_logo(art: str) -> Text:
             result.append("\n")
         if not line:
             continue
-        color = C_SECONDARY if i < 2 else C_PRIMARY
+        color = C_SECONDARY if i < 5 else C_PRIMARY
         result.append(line, style=Style(color=color, bold=True))
+    return result
+
+
+def _colorize_panel(art: str) -> Text:
+    result = Text()
+    lines = art.strip("\n").splitlines()
+    for i, line in enumerate(lines):
+        if i > 0:
+            result.append("\n")
+        style = Style(color=C_WARN if i in (1, 2, 3) else C_DIM, bold=i in (1, 2, 3))
+        result.append(line, style=style)
     return result
 
 
@@ -76,7 +102,8 @@ def render_banner(*, compact: bool = False, version: str = __version__) -> Rende
 
     hero = Table.grid(padding=(0, 3))
     hero.add_column(no_wrap=True)
-    hero.add_row(_colorize_logo(LOGO))
+    hero.add_column(no_wrap=True)
+    hero.add_row(_colorize_logo(LOGO), _colorize_panel(SIGNAL_PANEL))
     hero_lockup = Align(hero, align="center")
     identity = Text(justify="center")
     identity.append(":: ", style=Style(color=C_ACCENT, bold=True))

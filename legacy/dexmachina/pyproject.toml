@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dexmachina"
+version = "0.2.0"
+description = "Deprecated transition package for PinDroid"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "PinDroid Contributors" }]
+keywords = ["android", "pentesting", "frida", "security", "deprecated"]
+classifiers = [
+    "Development Status :: 7 - Inactive",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "pindroid>=0.1.1",
+]
+
+[project.scripts]
+dexmachina = "dexmachina.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Codeblin/PinDroid"
+Repository = "https://github.com/Codeblin/PinDroid"
+Issues = "https://github.com/Codeblin/PinDroid/issues"
+Documentation = "https://github.com/Codeblin/PinDroid#readme"
+"Migration Guide" = "https://github.com/Codeblin/PinDroid/blob/main/MIGRATING.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["dexmachina*"]

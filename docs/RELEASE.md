@@ -54,3 +54,41 @@ The release workflow will:
 - Confirm the GitHub environment is named `pypi`.
 - Confirm the workflow has `id-token: write`.
 - Re-run the tag workflow after fixing configuration.
+
+## Final DexMachina Transition Release
+
+Before archiving the old `dexmachina` PyPI project, publish one final
+transition release from `legacy/dexmachina`.
+
+This package is intentionally separate from the maintained `pindroid` package.
+It:
+
+- uses PyPI name `dexmachina`,
+- has `Development Status :: 7 - Inactive`,
+- depends on `pindroid`,
+- exposes a deprecated `dexmachina` CLI wrapper,
+- prints a rename notice before delegating to PinDroid.
+
+Build locally:
+
+```bash
+python -m pip install --upgrade build twine
+cd legacy/dexmachina
+python -m build
+python -m twine check dist/*
+```
+
+Publish after `pindroid` exists on PyPI:
+
+```bash
+python -m twine upload dist/*
+```
+
+After the transition release is visible on PyPI, archive the old project at:
+
+```text
+https://pypi.org/manage/project/dexmachina/settings/
+```
+
+Do not delete the project or old releases. Archiving keeps the old name reserved
+and visibly redirects users without creating a package-squatting gap.
