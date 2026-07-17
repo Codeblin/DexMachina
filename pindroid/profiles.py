@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dexmachina.registry import TOOLS
+from pindroid.registry import TOOLS
 
 # Ordered profiles from smallest to largest. Each maps to registry tool names.
 # 'full' is computed from the registry (all auto-installable tools).

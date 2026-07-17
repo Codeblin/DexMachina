@@ -33,7 +33,7 @@ jobs:
 
       - name: Run tests
         shell: bash
-        run: python -m pytest --cov=dexmachina --cov-report=term-missing --cov-report=xml
+        run: python -m pytest --cov=pindroid --cov-report=term-missing --cov-report=xml
 
   android-tools-smoke:
     name: Android tools smoke test
@@ -61,8 +61,8 @@ jobs:
         shell: bash
         run: |
           adb version
-          dexmachina --no-banner status --offline
-          dexmachina --no-banner device list
+          pindroid --no-banner status --offline
+          pindroid --no-banner device list
 
   emulator-integration:
     name: Rooted emulator integration
@@ -122,16 +122,16 @@ jobs:
           mkdir -p "$AVD_HOME"
           echo no | "$AVDMANAGER" --verbose create avd \
             --force \
-            --name dexmachina-ci \
+            --name pindroid-ci \
             --package "system-images;android-35;default;x86_64" \
             --device pixel_6 \
-            --path "$AVD_HOME/dexmachina-ci.avd"
+            --path "$AVD_HOME/pindroid-ci.avd"
           printf '%s\n' \
             "avd.ini.encoding=UTF-8" \
-            "path=$AVD_HOME/dexmachina-ci.avd" \
-            "path.rel=avd/dexmachina-ci.avd" \
+            "path=$AVD_HOME/pindroid-ci.avd" \
+            "path.rel=avd/pindroid-ci.avd" \
             "target=android-35" \
-            > "$AVD_HOME/dexmachina-ci.ini"
+            > "$AVD_HOME/pindroid-ci.ini"
           "$SDK_ROOT/emulator/emulator" -list-avds
           ls -la "$HOME/.android" "$AVD_HOME"
 
@@ -141,8 +141,8 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-}"
           "$ANDROID_HOME/emulator/emulator" -list-avds
-          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx "dexmachina-ci"; then
-            echo "::error::AVD dexmachina-ci was not created or is not visible to emulator"
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx "pindroid-ci"; then
+            echo "::error::AVD pindroid-ci was not created or is not visible to emulator"
             find "$HOME/.android" -maxdepth 3 -type f -print || true
             exit 1
           fi
@@ -159,7 +159,7 @@ jobs:
           fi
 
           nohup "$ANDROID_HOME/emulator/emulator" \
-            -avd dexmachina-ci \
+            -avd pindroid-ci \
             -no-window \
             -no-audio \
             -no-boot-anim \
@@ -234,10 +234,10 @@ jobs:
           fi
           adb shell id
 
-      - name: Run DexMachina emulator smoke
+      - name: Run PinDroid emulator smoke
         shell: bash
         run: |
-          dexmachina --no-banner up --profile minimal --yes
-          dexmachina --no-banner device list
-          dexmachina --no-banner device ready
-          dexmachina frida-ps -U
+          pindroid --no-banner up --profile minimal --yes
+          pindroid --no-banner device list
+          pindroid --no-banner device ready
+          pindroid frida-ps -U

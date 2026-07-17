@@ -1,6 +1,6 @@
 """Tests for version comparison utilities."""
 
-from dexmachina.utils import (
+from pindroid.utils import (
     compare_versions,
     find_git,
     normalize_version,

@@ -1,6 +1,6 @@
 # Release Process
 
-DexMachina releases are tag-driven.
+PinDroid releases are tag-driven.
 
 ## One-Time PyPI Setup
 
@@ -8,9 +8,9 @@ Create the PyPI project and configure Trusted Publishing before pushing the firs
 
 PyPI Trusted Publisher fields:
 
-- PyPI project: `dexmachina`
+- PyPI project: `pindroid`
 - Owner: `Codeblin`
-- Repository: `DexMachina`
+- Repository: `PinDroid`
 - Workflow: `release.yml`
 - Environment: `pypi`
 
@@ -24,7 +24,7 @@ This matches PyPI's Trusted Publishing model: GitHub Actions gets a short-lived 
 
 ## Cut A Release
 
-1. Make sure `pyproject.toml`, `dexmachina/__init__.py`, and `CHANGELOG.md` all reference the same version.
+1. Make sure `pyproject.toml`, `pindroid/__init__.py`, and `CHANGELOG.md` all reference the same version.
 2. Run:
 
 ```bash

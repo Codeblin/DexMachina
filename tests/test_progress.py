@@ -1,6 +1,6 @@
 """Tests for progress indicators."""
 
-from dexmachina.progress import work_progress, work_spinner
+from pindroid.progress import work_progress, work_spinner
 
 
 def test_work_spinner_runs():

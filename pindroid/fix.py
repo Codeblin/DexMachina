@@ -10,10 +10,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from dexmachina.config import config_path_of, get_pinned_version, is_ignored, load_config
-from dexmachina.device import push_frida_server
-from dexmachina.doctor import CheckResult, run_doctor
-from dexmachina.installer import (
+from pindroid.config import config_path_of, get_pinned_version, is_ignored, load_config
+from pindroid.device import push_frida_server
+from pindroid.doctor import CheckResult, run_doctor
+from pindroid.installer import (
     InstallError,
     get_tool_status,
     get_tool_version,
@@ -22,9 +22,9 @@ from dexmachina.installer import (
     update_pin_group,
     update_tool,
 )
-from dexmachina.progress import work_progress
-from dexmachina.registry import FRIDA_PIN_GROUP, get_tool, list_tools
-from dexmachina.utils import which
+from pindroid.progress import work_progress
+from pindroid.registry import FRIDA_PIN_GROUP, get_tool, list_tools
+from pindroid.utils import which
 
 console = Console()
 
@@ -65,7 +65,7 @@ RISK_LEVELS: dict[str, dict[str, str]] = {
         "title": "High impact / manual",
         "short": "Requires you — not run automatically",
         "detail": (
-            "OS-level installs, hardware setup, or commercial tools DexMachina cannot "
+            "OS-level installs, hardware setup, or commercial tools PinDroid cannot "
             "install for you. Listed in the plan but never applied without your action."
         ),
         "examples": "Upgrade Python, install JDK/Node.js, connect a USB device",
@@ -299,7 +299,7 @@ def build_fix_plan(
                     id=f"bootstrap-{tool_name}",
                     category="bootstrap",
                     title=f"Install core tool: {tool.display_name}",
-                    description="Part of the DexMachina pentest environment baseline",
+                    description="Part of the PinDroid pentest environment baseline",
                     risk="low",
                     risk_detail=f"Adds {tool.display_name} to your core pentest kit",
                     automated=True,
@@ -372,7 +372,7 @@ def print_fix_plan(plan: list[FixAction], *, show_legend: bool = True) -> None:
         print_risk_legend()
 
     table = Table(
-        title="[bold cyan]⚙ DexMachina Fix Plan[/]",
+        title="[bold cyan]⚙ PinDroid Fix Plan[/]",
         show_header=True,
         header_style="bold #00ff41",
         border_style="#3a6652",

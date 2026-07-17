@@ -4,20 +4,20 @@ import os
 
 from rich.console import Console
 
-from dexmachina.banner import banner_enabled, render_banner
+from pindroid.banner import banner_enabled, render_banner
 
 
 def test_banner_enabled_default():
-    os.environ.pop("DEXMACHINA_NO_BANNER", None)
+    os.environ.pop("PINDROID_NO_BANNER", None)
     assert banner_enabled() is True
 
 
 def test_banner_disabled_via_env():
-    os.environ["DEXMACHINA_NO_BANNER"] = "1"
+    os.environ["PINDROID_NO_BANNER"] = "1"
     try:
         assert banner_enabled() is False
     finally:
-        os.environ.pop("DEXMACHINA_NO_BANNER", None)
+        os.environ.pop("PINDROID_NO_BANNER", None)
 
 
 def test_render_banner_compact():
@@ -25,7 +25,7 @@ def test_render_banner_compact():
     console = Console(record=True, color_system=None, width=100)
     console.print(rendered)
     output = console.export_text()
-    assert "DEXMACHINA" in output
+    assert "PinDroid" in output
     assert "DROIDFORGE" not in output
 
 
@@ -35,6 +35,6 @@ def test_render_banner_full():
     console.print(rendered)
     output = console.export_text()
     assert "ANDROID PENTEST ENVIRONMENT" in output
-    assert "<   X   >" in output
-    assert "'---+---'" in output
+    assert "PINDROID" in output
+    assert "APK WORKFLOW" in output
     assert "DROIDFORGE" not in output

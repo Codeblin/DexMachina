@@ -2,13 +2,13 @@
 
 import pytest
 
-from dexmachina.profiles import (
+from pindroid.profiles import (
     PROFILES,
     profile_description,
     profile_names,
     resolve_profile,
 )
-from dexmachina.registry import TOOLS
+from pindroid.registry import TOOLS
 
 
 def test_minimal_profile_tools():

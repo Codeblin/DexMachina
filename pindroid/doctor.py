@@ -9,15 +9,15 @@ from typing import Callable
 from rich.console import Console
 from rich.panel import Panel
 
-from dexmachina.banner import doctor_table
-from dexmachina.config import get_pinned_version
-from dexmachina.progress import work_progress
-from dexmachina.device import DeviceError, check_frida_server_running, frida_server_status, get_local_frida_version, list_devices
-from dexmachina.config import install_dir
-from dexmachina.installer import get_tool_version, warm_version_cache
-from dexmachina.registry import FRIDA_PIN_GROUP, TOOLS, get_tool
-from dexmachina.runtime import _find_binary_in_dir, build_run_env, collect_tool_bin_paths
-from dexmachina.utils import (
+from pindroid.banner import doctor_table
+from pindroid.config import get_pinned_version
+from pindroid.progress import work_progress
+from pindroid.device import DeviceError, check_frida_server_running, frida_server_status, get_local_frida_version, list_devices
+from pindroid.config import install_dir
+from pindroid.installer import get_tool_version, warm_version_cache
+from pindroid.registry import FRIDA_PIN_GROUP, TOOLS, get_tool
+from pindroid.runtime import _find_binary_in_dir, build_run_env, collect_tool_bin_paths
+from pindroid.utils import (
     PROBE_CMD_TIMEOUT,
     normalize_pkg_name,
     parse_version,
@@ -58,7 +58,7 @@ def check_java() -> CheckResult:
             "Java",
             "warn",
             "Not found — required for jadx, apktool, uber-apk-signer",
-            "Install JDK 11+ and set java_path in dexmachina.toml",
+            "Install JDK 11+ and set java_path in pindroid.toml",
             automated=False,
         )
     result = run_cmd("java -version", timeout=PROBE_CMD_TIMEOUT)
@@ -80,7 +80,7 @@ def check_adb(config: dict) -> CheckResult:
             automated=False,
         )
     except DeviceError as e:
-        return CheckResult("ADB", "fail", str(e), "dexmachina install adb")
+        return CheckResult("ADB", "fail", str(e), "pindroid install adb")
 
 
 def check_nodejs() -> CheckResult:
@@ -98,8 +98,8 @@ def check_nodejs() -> CheckResult:
 
 
 def check_frida_pin_group(config: dict) -> CheckResult:
-    from dexmachina.registry import FRIDA_PIN_GROUP
-    from dexmachina.versions import FRIDA_COMPANIONS, FRIDA_EXACT
+    from pindroid.registry import FRIDA_PIN_GROUP
+    from pindroid.versions import FRIDA_COMPANIONS, FRIDA_EXACT
 
     frida_tool = get_tool("frida")
     frida_ver = get_tool_version(frida_tool, config)
@@ -109,7 +109,7 @@ def check_frida_pin_group(config: dict) -> CheckResult:
             "Frida pin group",
             "warn",
             "frida runtime not installed",
-            "dexmachina use latest   # or: dexmachina install frida",
+            "pindroid use latest   # or: pindroid install frida",
         )
 
     parts = [f"frida={frida_ver}"]
@@ -136,7 +136,7 @@ def check_frida_pin_group(config: dict) -> CheckResult:
             "Frida pin group",
             "fail",
             f"Pinned frida {pinned} but runtime installed is {frida_ver} ({', '.join(parts)})",
-            f"dexmachina use {pinned}   # align runtime to pin",
+            f"pindroid use {pinned}   # align runtime to pin",
         )
 
     if missing:
@@ -144,7 +144,7 @@ def check_frida_pin_group(config: dict) -> CheckResult:
             "Frida pin group",
             "warn",
             f"Runtime {frida_ver}; missing companions: {', '.join(missing)}",
-            "dexmachina sync frida   # or: dexmachina use " + frida_ver,
+            "pindroid sync frida   # or: pindroid use " + frida_ver,
         )
 
     msg = f"Runtime OK — {', '.join(parts)}"
@@ -183,7 +183,7 @@ def check_frida_server_match(config: dict) -> CheckResult:
             "Frida server",
             "warn",
             f"Not running on device (local frida: {local})",
-            "dexmachina push-server",
+            "pindroid push-server",
         )
 
     status = frida_server_status(config, devices[0])
@@ -192,7 +192,7 @@ def check_frida_server_match(config: dict) -> CheckResult:
             "Frida server",
             "warn",
             f"Running as {status.user or 'non-root'} — attach to apps will fail",
-            "dexmachina push-server",
+            "pindroid push-server",
         )
     if not status.device_rooted:
         return CheckResult(
@@ -214,7 +214,7 @@ def check_frida_server_match(config: dict) -> CheckResult:
         "Frida server",
         "warn",
         f"Running but frida-ps failed — version mismatch likely (local: {local})",
-        "dexmachina push-server",
+        "pindroid push-server",
     )
 
 
@@ -249,7 +249,7 @@ def _tool_installed_fast(tool, config: dict, pip_versions: dict[str, str]) -> tu
 
 
 def check_broken_installs(config: dict) -> list[CheckResult]:
-    from dexmachina.installer import _merged_pip_versions
+    from pindroid.installer import _merged_pip_versions
 
     results: list[CheckResult] = []
     pip_versions = _merged_pip_versions(config)
@@ -272,8 +272,8 @@ def check_broken_installs(config: dict) -> list[CheckResult]:
                 tool.display_name,
                 "warn",
                 f"Installed ({label}) but '{tool.binary_name}' is not on your PATH",
-                "Use 'dexmachina shell' (ready PATH) or 'dexmachina env' to print PATH setup; "
-                f"or reinstall: dexmachina install {name}",
+                "Use 'pindroid shell' (ready PATH) or 'pindroid env' to print PATH setup; "
+                f"or reinstall: pindroid install {name}",
                 fix_tool=name,
                 automated=True,
             )
@@ -351,8 +351,8 @@ def print_doctor_report(config: dict) -> int:
     if path_warnings:
         console.print(
             "\n[dim]Tip:[/] tools are installed but not on PATH — run "
-            "[cyan]dexmachina shell[/] for a ready environment, or "
-            "[cyan]dexmachina env[/] to print PATH setup."
+            "[cyan]pindroid shell[/] for a ready environment, or "
+            "[cyan]pindroid env[/] to print PATH setup."
         )
 
     if failures:

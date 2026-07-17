@@ -1,8 +1,8 @@
 [settings]
 adb_path = "adb"
 java_path = "java"
-install_dir = "~/.dexmachina/tools"
-# Default profile for `dexmachina up` (minimal | dynamic | static | traffic | scanners | full)
+install_dir = "~/.pindroid/tools"
+# Default profile for `pindroid up` (minimal | dynamic | static | traffic | scanners | full)
 # profile = "dynamic"
 auto_push_frida_server = false
 
@@ -11,7 +11,7 @@ auto_push_frida_server = false
 # frida = "17.11.0"
 
 [active]
-# nvm-style: which frida venv is selected (set by: dexmachina use 17.11.0)
+# nvm-style: which frida venv is selected (set by: pindroid use 17.11.0)
 # frida = "17.11.0"
 
 [ignored]

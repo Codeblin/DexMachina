@@ -1,4 +1,4 @@
-"""ASCII art banner and terminal theme for DexMachina."""
+"""ASCII art banner and terminal theme for PinDroid."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
-from dexmachina import __version__
+from pindroid import __version__
 
 F = TypeVar("F", bound=Callable)
 
-# ── Theme palette (classic hacker / Android pentest) ─────────────────────────
+# Theme palette (classic hacker / Android pentest)
 C_PRIMARY = "#00ff41"      # matrix green
 C_SECONDARY = "#00d4ff"    # cyber cyan
 C_ACCENT = "#ff0055"       # hot magenta
@@ -26,31 +26,12 @@ C_WARN = "#ffb000"         # amber
 C_DIM = "#3a6652"          # muted green
 C_GLOW = "#39ff14"         # neon
 
-MACHINE_EYE = r"""
-      .---------.
-  .--' .-----. '--.
- /    / _____ \    \
-|[::]| /     \ |[::]|
-|----|<   X   >|----|
-|[::]| \_____/ |[::]|
- \    \       /    /
-  '--. '-----' .--'
-      '---+---'
-          V
-"""
-
 LOGO = r"""
-  ____  _____ __  __
- |  _ \| ____|\ \/ /
- | | | |  _|   \  /
- | |_| | |___  /  \
- |____/|_____|/_/\_\
-
-  __  __    _    ____ _   _ ___ _   _    _
- |  \/  |  / \  / ___| | | |_ _| \ | |  / \
- | |\/| | / _ \| |   | |_| || ||  \| | / _ \
- | |  | |/ ___ \ |___|  _  || || |\  |/ ___ \
- |_|  |_/_/   \_\____|_| |_|___|_| \_/_/   \_\
+  ____  _       ____             _     _
+ |  _ \(_)_ __ |  _ \ _ __ ___ (_) __| |
+ | |_) | | '_ \| | | | '__/ _ \| |/ _` |
+ |  __/| | | | | |_| | | | (_) | | (_| |
+ |_|   |_|_| |_|____/|_|  \___/|_|\__,_|
 """
 
 CIRCUIT_FOOTER = (
@@ -61,28 +42,8 @@ TAGLINE = "ANDROID PENTEST ENVIRONMENT"
 
 
 def banner_enabled() -> bool:
-    val = os.environ.get("DEXMACHINA_NO_BANNER", "").lower()
+    val = os.environ.get("PINDROID_NO_BANNER", "").lower()
     return val not in ("1", "true", "yes")
-
-
-def _colorize_machine(art: str) -> Text:
-    result = Text()
-    lines = art.strip("\n").splitlines()
-    for i, line in enumerate(lines):
-        if i > 0:
-            result.append("\n")
-        for ch in line:
-            if ch == "X":
-                result.append(ch, style=Style(color=C_ACCENT, bold=True))
-            elif ch in "<>V":
-                result.append(ch, style=Style(color=C_WARN, bold=True))
-            elif ch in "/\\_":
-                result.append(ch, style=Style(color=C_SECONDARY, bold=True))
-            elif ch in "|.-'+:[]":
-                result.append(ch, style=Style(color=C_PRIMARY, bold=True))
-            else:
-                result.append(ch)
-    return result
 
 
 def _colorize_logo(art: str) -> Text:
@@ -93,7 +54,7 @@ def _colorize_logo(art: str) -> Text:
             result.append("\n")
         if not line:
             continue
-        color = C_SECONDARY if i < 5 else C_PRIMARY
+        color = C_SECONDARY if i < 2 else C_PRIMARY
         result.append(line, style=Style(color=color, bold=True))
     return result
 
@@ -101,11 +62,11 @@ def _colorize_logo(art: str) -> Text:
 def render_banner(*, compact: bool = False, version: str = __version__) -> RenderableType:
     if compact:
         line = Text()
-        line.append("[::] ", style=Style(color=C_ACCENT, bold=True))
-        line.append("DEX", style=Style(color=C_SECONDARY, bold=True))
-        line.append("MACHINA", style=Style(color=C_PRIMARY, bold=True))
+        line.append("[pin] ", style=Style(color=C_ACCENT, bold=True))
+        line.append("Pin", style=Style(color=C_SECONDARY, bold=True))
+        line.append("Droid", style=Style(color=C_PRIMARY, bold=True))
         line.append(f"  v{version}  ", style=Style(color=C_DIM))
-        line.append("│", style=Style(color=C_DIM))
+        line.append("|", style=Style(color=C_DIM))
         line.append(" android pentest environment ", style=Style(color=C_GLOW, italic=True))
         return Panel(
             line,
@@ -115,8 +76,7 @@ def render_banner(*, compact: bool = False, version: str = __version__) -> Rende
 
     hero = Table.grid(padding=(0, 3))
     hero.add_column(no_wrap=True)
-    hero.add_column(no_wrap=True)
-    hero.add_row(_colorize_machine(MACHINE_EYE), _colorize_logo(LOGO))
+    hero.add_row(_colorize_logo(LOGO))
     hero_lockup = Align(hero, align="center")
     identity = Text(justify="center")
     identity.append(":: ", style=Style(color=C_ACCENT, bold=True))
@@ -125,7 +85,7 @@ def render_banner(*, compact: bool = False, version: str = __version__) -> Rende
     metadata = Text(justify="center")
     metadata.append(f"v{version}", style=Style(color=C_WARN, bold=True))
     metadata.append("  //  ", style=Style(color=C_DIM))
-    metadata.append("DEX BYTECODE", style=Style(color=C_SECONDARY))
+    metadata.append("APK WORKFLOW", style=Style(color=C_SECONDARY))
     metadata.append("  //  ", style=Style(color=C_DIM))
     metadata.append("MOBILE SECURITY", style=Style(color=C_PRIMARY))
     footer = Text(CIRCUIT_FOOTER, style=Style(color=C_DIM), justify="center")
@@ -135,7 +95,7 @@ def render_banner(*, compact: bool = False, version: str = __version__) -> Rende
             Group(hero_lockup, Text(""), identity, metadata, Text(""), footer),
             border_style=Style(color=C_PRIMARY),
             padding=(1, 2),
-            title="[bold bright_green][ DEXMACHINA ][/]",
+            title="[bold bright_green][ PINDROID ][/]",
             title_align="center",
         ),
         Rule("[dim]environment online[/]", style=Style(color=C_DIM)),
@@ -165,11 +125,9 @@ def with_banner(*, compact: bool = True) -> Callable[[F], F]:
     return decorator
 
 
-# ── Shared table themes ───────────────────────────────────────────────────────
-
 def status_table(title: str = "Tool Status") -> Table:
     table = Table(
-        title=f"[bold bright_cyan]⚙ {title}[/]",
+        title=f"[bold bright_cyan]{title}[/]",
         title_style=Style(color=C_SECONDARY, bold=True),
         show_header=True,
         header_style=f"bold {C_PRIMARY}",
@@ -188,7 +146,7 @@ def status_table(title: str = "Tool Status") -> Table:
 
 def doctor_table() -> Table:
     table = Table(
-        title="[bold]🩺 DexMachina Doctor[/]",
+        title="[bold]PinDroid Doctor[/]",
         title_style=Style(color=C_ACCENT, bold=True),
         show_header=True,
         header_style=f"bold {C_PRIMARY}",
@@ -203,7 +161,7 @@ def doctor_table() -> Table:
 def info_panel(title: str, content: str) -> Panel:
     return Panel(
         content,
-        title=f"[bold {C_PRIMARY}]◈ {title}[/]",
+        title=f"[bold {C_PRIMARY}]{title}[/]",
         border_style=Style(color=C_SECONDARY),
         padding=(1, 2),
     )

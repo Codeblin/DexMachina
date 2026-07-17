@@ -15,10 +15,10 @@ except ImportError:
 
 import tomli_w
 
-from dexmachina.registry import get_pin_group, get_pin_group_leader, get_tool
+from pindroid.registry import get_pin_group, get_pin_group_leader, get_tool
 
-DEFAULT_CONFIG_NAME = "dexmachina.toml"
-DEFAULT_TEMPLATE = "dexmachina.toml.default"
+DEFAULT_CONFIG_NAME = "pindroid.toml"
+DEFAULT_TEMPLATE = "pindroid.toml.default"
 META_KEY = "_meta"
 
 
@@ -35,7 +35,7 @@ def default_config_path() -> Path:
             return candidate
         if (d / ".git").exists():
             break
-    return Path.home() / ".dexmachina" / DEFAULT_CONFIG_NAME
+    return Path.home() / ".pindroid" / DEFAULT_CONFIG_NAME
 
 
 def ensure_config(path: Path | None = None) -> Path:
@@ -55,7 +55,7 @@ def ensure_config(path: Path | None = None) -> Path:
         else:
             cfg_path.write_text(
                 '[settings]\nadb_path = "adb"\njava_path = "java"\n'
-                'install_dir = "~/.dexmachina/tools"\nauto_push_frida_server = false\n\n'
+                'install_dir = "~/.pindroid/tools"\nauto_push_frida_server = false\n\n'
                 "[pins]\n\n[ignored]\ntools = []\n",
                 encoding="utf-8",
             )
@@ -80,7 +80,7 @@ def _empty_config() -> dict[str, Any]:
         "settings": {
             "adb_path": "adb",
             "java_path": "java",
-            "install_dir": "~/.dexmachina/tools",
+            "install_dir": "~/.pindroid/tools",
             "auto_push_frida_server": False,
         },
         "pins": {},
@@ -125,7 +125,7 @@ def config_root(config: dict[str, Any]) -> Path:
     root = meta.get("root")
     if root:
         return Path(root)
-    return Path.home() / ".dexmachina"
+    return Path.home() / ".pindroid"
 
 
 def config_path_of(config: dict[str, Any]) -> Path:
@@ -137,7 +137,7 @@ def config_path_of(config: dict[str, Any]) -> Path:
 
 def is_project_config(config: dict[str, Any]) -> bool:
     """True when the active config is repo-local (not the home fallback)."""
-    return config_root(config) != (Path.home() / ".dexmachina")
+    return config_root(config) != (Path.home() / ".pindroid")
 
 
 def expand_path(config: dict[str, Any], key: str) -> Path:

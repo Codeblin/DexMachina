@@ -1,4 +1,4 @@
-"""Categorized --help output for the DexMachina CLI."""
+"""Categorized --help output for the PinDroid CLI."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from collections import defaultdict
 
 import click
 
-from dexmachina.runtime import list_runnable_tools
-from dexmachina.utils import human_category
+from pindroid.runtime import list_runnable_tools
+from pindroid.utils import human_category
 
 # Core commands in display order (not tool dispatchers).
 CORE_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -77,7 +77,7 @@ CATEGORY_ORDER: tuple[str, ...] = (
 )
 
 
-class DexMachinaGroup(click.Group):
+class PinDroidGroup(click.Group):
     """Click group that renders --help in categorized sections."""
 
     def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -148,6 +148,6 @@ class DexMachinaGroup(click.Group):
 
         with formatter.section("Tip"):
             formatter.write_text(
-                "Run any tool directly: dexmachina frida -U   ·   "
-                "Full tool list: dexmachina arsenal"
+                "Run any tool directly: pindroid frida -U   ·   "
+                "Full tool list: pindroid arsenal"
             )

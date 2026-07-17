@@ -1,5 +1,5 @@
 name: New tool request
-description: Request a tool for the DexMachina registry
+description: Request a tool for the PinDroid registry
 title: "[Tool]: "
 labels: ["tool-request"]
 body:
@@ -50,7 +50,7 @@ body:
   - type: textarea
     id: value
     attributes:
-      label: Why should DexMachina include it?
+      label: Why should PinDroid include it?
       description: Describe the Android security workflow it supports.
     validations:
       required: true

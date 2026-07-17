@@ -14,12 +14,12 @@ except ImportError:  # pragma: no cover
 
 import tomli_w
 
-from dexmachina import __version__
-from dexmachina.config import config_root, get_setting, install_dir
-from dexmachina.registry import TOOLS, get_tool
+from pindroid import __version__
+from pindroid.config import config_root, get_setting, install_dir
+from pindroid.registry import TOOLS, get_tool
 
-LOCK_NAME = "dexmachina.lock.toml"
-INSTALL_METADATA_NAME = ".dexmachina-install.json"
+LOCK_NAME = "pindroid.lock.toml"
+INSTALL_METADATA_NAME = ".pindroid-install.json"
 
 
 def lock_path(config: dict) -> Path:
@@ -42,8 +42,8 @@ def _read_install_metadata(config: dict, tool_name: str) -> dict[str, Any] | Non
 
 def build_lock(config: dict) -> dict[str, Any]:
     """Snapshot currently installed tools + active frida runtime."""
-    from dexmachina.installer import get_tool_version
-    from dexmachina.versions import get_active_frida_version
+    from pindroid.installer import get_tool_version
+    from pindroid.versions import get_active_frida_version
 
     tools: dict[str, Any] = {}
     for name, tool in TOOLS.items():
@@ -64,7 +64,7 @@ def build_lock(config: dict) -> dict[str, Any]:
 
     lock: dict[str, Any] = {
         "meta": {
-            "dexmachina_version": __version__,
+            "pindroid_version": __version__,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
         "tools": tools,
@@ -102,8 +102,8 @@ def restore_from_lock(config: dict, lock: dict[str, Any]) -> tuple[list[str], li
 
     Returns (restored_tool_names, failures[(name, error)]).
     """
-    from dexmachina.installer import InstallError, install_tool
-    from dexmachina.versions import use_frida_version
+    from pindroid.installer import InstallError, install_tool
+    from pindroid.versions import use_frida_version
 
     restored: list[str] = []
     failures: list[tuple[str, str]] = []

@@ -1,4 +1,4 @@
-"""Tool registry and dependency graph for DexMachina."""
+"""Tool registry and dependency graph for PinDroid."""
 
 from __future__ import annotations
 

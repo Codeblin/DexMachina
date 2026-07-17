@@ -1,6 +1,6 @@
 """Tests for tool runtime dispatch."""
 
-from dexmachina.runtime import (
+from pindroid.runtime import (
     RESERVED_COMMANDS,
     lookup_invocation,
     list_runnable_tools,
@@ -33,7 +33,7 @@ def test_frida_kill_requires_args():
 
 
 def test_prepare_dispatch_empty_frida_kill():
-    from dexmachina.runtime import prepare_dispatch_args
+    from pindroid.runtime import prepare_dispatch_args
 
     inv = lookup_invocation("frida-kill")
     assert inv is not None
@@ -42,7 +42,7 @@ def test_prepare_dispatch_empty_frida_kill():
 
 
 def test_prepare_dispatch_passes_through():
-    from dexmachina.runtime import prepare_dispatch_args
+    from pindroid.runtime import prepare_dispatch_args
 
     inv = lookup_invocation("frida-kill")
     assert inv is not None

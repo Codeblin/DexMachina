@@ -1,4 +1,4 @@
-"""Click CLI entrypoint for DexMachina."""
+"""Click CLI entrypoint for PinDroid."""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ def _harden_stdio() -> None:
 
 _harden_stdio()
 
-from dexmachina import __version__
-from dexmachina.banner import info_panel, print_banner, status_table
-from dexmachina.bypass import BypassError, list_recipes, run_bypass
-from dexmachina.config import (
+from pindroid import __version__
+from pindroid.banner import info_panel, print_banner, status_table
+from pindroid.bypass import BypassError, list_recipes, run_bypass
+from pindroid.config import (
     config_path_of,
     default_config_path,
     ensure_config,
@@ -36,11 +36,11 @@ from dexmachina.config import (
     set_config_value,
     unpin_tool,
 )
-from dexmachina.device import push_frida_server
-from dexmachina.doctor import print_doctor_report
-from dexmachina.fix import run_fix
-from dexmachina.help_fmt import DexMachinaGroup
-from dexmachina.installer import (
+from pindroid.device import push_frida_server
+from pindroid.doctor import print_doctor_report
+from pindroid.fix import run_fix
+from pindroid.help_fmt import PinDroidGroup
+from pindroid.installer import (
     InstallError,
     get_latest_version,
     get_tool_status,
@@ -51,14 +51,14 @@ from dexmachina.installer import (
     update_pin_group,
     update_tool,
 )
-from dexmachina.lockfile import lock_path, read_lock, restore_from_lock, write_lock
-from dexmachina.profiles import (
+from pindroid.lockfile import lock_path, read_lock, restore_from_lock, write_lock
+from pindroid.profiles import (
     DEFAULT_PROFILE,
     profile_description,
     profile_names,
     resolve_profile,
 )
-from dexmachina.registry import (
+from pindroid.registry import (
     FRIDA_PIN_GROUP,
     TOOLS,
     get_pin_group,
@@ -66,8 +66,8 @@ from dexmachina.registry import (
     list_tools,
     resolve_install_order,
 )
-from dexmachina.progress import work_progress, work_spinner
-from dexmachina.runtime import (
+from pindroid.progress import work_progress, work_spinner
+from pindroid.runtime import (
     RunError,
     can_launch_interactive_shell,
     collect_tool_bin_paths,
@@ -79,8 +79,8 @@ from dexmachina.runtime import (
     run_invocation,
     shell_path_hint,
 )
-from dexmachina.utils import human_category
-from dexmachina.versions import (
+from pindroid.utils import human_category
+from pindroid.versions import (
     PinGroupSyncError,
     env_shell_hint,
     get_active_frida_version,
@@ -90,7 +90,7 @@ from dexmachina.versions import (
     resolve_frida_target,
     use_frida_version,
 )
-from dexmachina.workspace import find_git_root, init_workspace
+from pindroid.workspace import find_git_root, init_workspace
 
 console = Console()
 
@@ -132,7 +132,7 @@ def _print_info_catalog(category: str | None) -> None:
         return
 
     table = Table(
-        title="[bold cyan]DexMachina Tool Catalog[/]",
+        title="[bold cyan]PinDroid Tool Catalog[/]",
         show_header=True,
         header_style="bold #00ff41",
         border_style="#3a6652",
@@ -147,8 +147,8 @@ def _print_info_catalog(category: str | None) -> None:
 
     console.print(table)
     console.print(
-        f"\n[dim]{len(tools)} tools — details:[/] [cyan]dexmachina info <name>[/]  "
-        f"[dim]e.g.[/] [cyan]dexmachina info frida[/]"
+        f"\n[dim]{len(tools)} tools — details:[/] [cyan]pindroid info <name>[/]  "
+        f"[dim]e.g.[/] [cyan]pindroid info frida[/]"
     )
 
 
@@ -157,21 +157,21 @@ def _load_cfg() -> dict:
     return load_config()
 
 
-@click.group(cls=DexMachinaGroup, invoke_without_command=True)
+@click.group(cls=PinDroidGroup, invoke_without_command=True)
 @click.pass_context
-@click.version_option(__version__, prog_name="dexmachina")
+@click.version_option(__version__, prog_name="pindroid")
 @click.option(
     "--no-banner",
     is_flag=True,
     default=False,
-    help="Suppress ASCII banner (also: DEXMACHINA_NO_BANNER=1)",
+    help="Suppress ASCII banner (also: PINDROID_NO_BANNER=1)",
 )
 def main(ctx: click.Context, no_banner: bool) -> None:
-    """DexMachina — Android pentesting tool manager."""
+    """PinDroid — Android pentesting tool manager."""
     if no_banner:
         import os
 
-        os.environ["DEXMACHINA_NO_BANNER"] = "1"
+        os.environ["PINDROID_NO_BANNER"] = "1"
 
     if ctx.invoked_subcommand is None:
         print_banner(console, compact=False)
@@ -192,7 +192,7 @@ def status(category: str | None, offline: bool) -> None:
     tools = list_tools(category)
     warm_version_cache(cfg)
 
-    table = status_table("DexMachina Tool Status")
+    table = status_table("PinDroid Tool Status")
 
     status_icons = {
         "ok": "[bold green]▣ OK[/]",
@@ -241,8 +241,8 @@ def status(category: str | None, offline: bool) -> None:
         )
 
     # Frida pin group summary
-    from dexmachina.config import get_pinned_version
-    from dexmachina.versions import FRIDA_COMPANIONS, get_active_frida_version
+    from pindroid.config import get_pinned_version
+    from pindroid.versions import FRIDA_COMPANIONS, get_active_frida_version
 
     frida_ver = get_tool_version(get_tool("frida"), cfg)
     active = get_active_frida_version(cfg)
@@ -263,12 +263,12 @@ def status(category: str | None, offline: bool) -> None:
         suffix = f" ({', '.join(extras)})" if extras else ""
         console.print(f"\n[bold green]◈ Frida stack:[/] {line}{suffix}")
         console.print(
-            "  [dim]Switch runtime:[/] [cyan]dexmachina use 17.11.0[/]  "
-            "[dim]·[/]  [cyan]dexmachina sync frida[/]  "
-            "[dim]·[/]  [cyan]dexmachina versions frida[/]"
+            "  [dim]Switch runtime:[/] [cyan]pindroid use 17.11.0[/]  "
+            "[dim]·[/]  [cyan]pindroid sync frida[/]  "
+            "[dim]·[/]  [cyan]pindroid versions frida[/]"
         )
     else:
-        console.print("\n[yellow]Frida not installed.[/] Try: [cyan]dexmachina use latest[/]")
+        console.print("\n[yellow]Frida not installed.[/] Try: [cyan]pindroid use latest[/]")
 
 
 @main.command("install")
@@ -308,7 +308,7 @@ def install_cmd(tool: str | None, install_all: bool, ver: str | None, force: boo
 
     group = get_pin_group(tool)
     if ver and len(group) > 1 and not force:
-        from dexmachina.installer import check_pin_group_conflict
+        from pindroid.installer import check_pin_group_conflict
 
         conflicts = check_pin_group_conflict(tool, ver, cfg)
         if conflicts:
@@ -408,7 +408,7 @@ def update_cmd(tool: str | None, update_all: bool, force: bool) -> None:
                 "(they use [italic]different[/] version numbers)\n"
                 "• [bold]medusa[/] → optional, best-effort\n\n"
                 f"[dim]Members:[/] {', '.join(members)}\n\n"
-                "Prefer nvm-style venvs? Use [cyan]dexmachina use {target}[/] instead.".format(
+                "Prefer nvm-style venvs? Use [cyan]pindroid use {target}[/] instead.".format(
                     target=target
                 ),
                 title="Sync frida pin group",
@@ -488,7 +488,7 @@ def use_cmd(version: str, force: bool, no_pin: bool) -> None:
         print_sync_error(e)
         sys.exit(1)
     cfg = _load_cfg()
-    from dexmachina.versions import get_active_frida_version
+    from pindroid.versions import get_active_frida_version
 
     active = get_active_frida_version(cfg)
     console.print(f"\n[green]✓[/] Now using frida runtime [bold]{active}[/]")
@@ -501,7 +501,7 @@ def use_cmd(version: str, force: bool, no_pin: bool) -> None:
         )
     )
     console.print(
-        "\n[dim]Device:[/] [cyan]dexmachina push-server[/] after switching runtime"
+        "\n[dim]Device:[/] [cyan]pindroid push-server[/] after switching runtime"
     )
 
 
@@ -519,10 +519,10 @@ def versions_cmd(tool: str) -> None:
 @main.command("env")
 @click.option("--frida-only", is_flag=True, help="Only the active frida venv (legacy)")
 def env_cmd(frida_only: bool) -> None:
-    """Print shell commands to put all DexMachina tools on PATH."""
+    """Print shell commands to put all PinDroid tools on PATH."""
     cfg = _load_cfg()
     hint = env_shell_hint(cfg) if frida_only else shell_path_hint(cfg)
-    console.print(Panel(hint, title="DexMachina environment", border_style="#3a6652"))
+    console.print(Panel(hint, title="PinDroid environment", border_style="#3a6652"))
 
 
 @main.command("shell")
@@ -532,7 +532,7 @@ def shell_cmd() -> None:
     paths = collect_tool_bin_paths(cfg)
     if not paths:
         console.print(
-            "[yellow]No tools installed yet.[/] Run [cyan]dexmachina up[/] first."
+            "[yellow]No tools installed yet.[/] Run [cyan]pindroid up[/] first."
         )
         sys.exit(1)
 
@@ -556,9 +556,9 @@ def shell_cmd() -> None:
             "Tools on PATH for this session:\n"
             + "\n".join(f"  [green]•[/] {p}" for p in paths)
             + f"\n\n[dim]Launching[/] [cyan]{shell_name}[/] "
-            + "[dim]- look for the[/] [green][DexMachina][/] [dim]prompt.[/]\n"
-            + "[dim]Type[/] [cyan]exit[/] [dim]to leave the DexMachina shell.[/]",
-            title="[bold #00ff41]⚔ DexMachina shell[/]",
+            + "[dim]- look for the[/] [green][PinDroid][/] [dim]prompt.[/]\n"
+            + "[dim]Type[/] [cyan]exit[/] [dim]to leave the PinDroid shell.[/]",
+            title="[bold #00ff41]⚔ PinDroid shell[/]",
             border_style="#00ff41",
         )
     )
@@ -571,18 +571,18 @@ def shell_cmd() -> None:
 def console_cmd(serial: str | None) -> None:
     """Interactive pentest console (REPL) for a connected device.
 
-    A DexMachina shell with first-class verbs: devices, apps, target,
+    A PinDroid shell with first-class verbs: devices, apps, target,
     ready, hook/bypass, objection, proxy, logcat, screenshot, adb, run…
 
     \b
     Example:
-      dexmachina console
-      dexmachina> devices
-      dexmachina> target com.example.app
-      dexmachina> ready
-      dexmachina> hook
+      pindroid console
+      pindroid> devices
+      pindroid> target com.example.app
+      pindroid> ready
+      pindroid> hook
     """
-    from dexmachina.console import run_console
+    from pindroid.console import run_console
 
     cfg = _load_cfg()
     sys.exit(run_console(cfg, serial=serial))
@@ -598,27 +598,27 @@ def console_cmd(serial: str | None) -> None:
 @click.argument("tool")
 @click.pass_context
 def run_cmd(ctx: click.Context, tool: str) -> None:
-    """Run a pentest tool through DexMachina (explicit dispatch).
+    """Run a pentest tool through PinDroid (explicit dispatch).
 
     Pass tool flags after the tool name:
 
-      dexmachina run objection -g com.example.app explore
+      pindroid run objection -g com.example.app explore
 
-    Same as: dexmachina objection -g com.example.app explore
+    Same as: pindroid objection -g com.example.app explore
     """
     cfg = _load_cfg()
     try:
         code = run_invocation(tool, list(ctx.args), cfg)
     except RunError as e:
         console.print(f"[red]{e}[/]")
-        console.print("[dim]List runners:[/] [cyan]dexmachina arsenal[/]")
+        console.print("[dim]List runners:[/] [cyan]pindroid arsenal[/]")
         sys.exit(1)
     sys.exit(code)
 
 
 @main.command("arsenal")
 def arsenal_cmd() -> None:
-    """List all tool CLIs available through dexmachina (direct or via run)."""
+    """List all tool CLIs available through pindroid (direct or via run)."""
     from rich.table import Table
 
     print_banner(console, compact=True)
@@ -626,7 +626,7 @@ def arsenal_cmd() -> None:
     invocations = list_runnable_tools()
 
     table = Table(
-        title="[bold red]⚔ DexMachina Arsenal[/] — runnable CLIs",
+        title="[bold red]⚔ PinDroid Arsenal[/] — runnable CLIs",
         header_style="bold #00ff41",
         border_style="#3a6652",
     )
@@ -637,7 +637,7 @@ def arsenal_cmd() -> None:
 
     for inv in invocations:
         _, _, status = format_arsenal_row(inv, cfg)
-        example = inv.usage_hint or f"dexmachina {inv.name} --help"
+        example = inv.usage_hint or f"pindroid {inv.name} --help"
         table.add_row(
             inv.name,
             inv.tool.name,
@@ -648,8 +648,8 @@ def arsenal_cmd() -> None:
     console.print(table)
     console.print(
         f"\n[dim]{len(invocations)} dispatchers · "
-        "invoke directly: [cyan]dexmachina frida --version[/]  "
-        "or: [cyan]dexmachina run objection explore[/]"
+        "invoke directly: [cyan]pindroid frida --version[/]  "
+        "or: [cyan]pindroid run objection explore[/]"
     )
 
 
@@ -714,7 +714,7 @@ def _run_bypass_cmd(recipe_id: str, package: str | None, **kwargs) -> None:
         package = ""
     elif not package:
         raise click.ClickException(
-            "Missing -n / --name. List targets with: dexmachina frida-ps -Uai\n"
+            "Missing -n / --name. List targets with: pindroid frida-ps -Uai\n"
             "Or use --foremost to hook the app on screen."
         )
     cfg = _load_cfg()
@@ -754,14 +754,14 @@ def bypass_group(
 
     \b
     Quick start (both bypasses — recommended):
-      dexmachina bypass -n com.example.app --spawn
-      dexmachina hook -n com.example.app --spawn
-      dexmachina bypass all -n com.example.app --spawn
+      pindroid bypass -n com.example.app --spawn
+      pindroid hook -n com.example.app --spawn
+      pindroid bypass all -n com.example.app --spawn
 
     \b
     Individual bypasses:
-      dexmachina bypass ssl -n com.example.app
-      dexmachina bypass root -n com.example.app
+      pindroid bypass ssl -n com.example.app
+      pindroid bypass root -n com.example.app
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -783,7 +783,7 @@ def bypass_group(
 
     print_banner(console, compact=True)
     table = Table(
-        title="[bold cyan]DexMachina Bypass Presets[/]",
+        title="[bold cyan]PinDroid Bypass Presets[/]",
         header_style="bold #00ff41",
         border_style="#3a6652",
     )
@@ -797,9 +797,9 @@ def bypass_group(
     console.print(table)
     console.print(
         "\n[bold]Quick start (SSL + root):[/]\n"
-        "  [cyan]dexmachina bypass -n com.example.app --spawn[/]\n"
-        "  [cyan]dexmachina hook -n com.example.app --spawn[/]\n\n"
-        "[dim]Requires frida-server:[/] [cyan]dexmachina push-server[/]"
+        "  [cyan]pindroid bypass -n com.example.app --spawn[/]\n"
+        "  [cyan]pindroid hook -n com.example.app --spawn[/]\n\n"
+        "[dim]Requires frida-server:[/] [cyan]pindroid push-server[/]"
     )
 
 
@@ -864,12 +864,12 @@ def hook_cmd(
 ) -> None:
     """Start a test hook: SSL pinning + root detection bypass (shorthand).
 
-    Same as: dexmachina bypass -n <package> --spawn
+    Same as: pindroid bypass -n <package> --spawn
 
     \b
     Examples:
-      dexmachina hook -n com.example.app --spawn
-      dexmachina hook --foremost
+      pindroid hook -n com.example.app --spawn
+      pindroid hook --foremost
     """
     _run_bypass_cmd(
         "all",
@@ -949,7 +949,7 @@ def pin_cmd(tool: str, version: str) -> None:
     console.print(f"[green]✓[/] Pinned frida [bold]runtime[/] to [bold]{version}[/]")
     console.print(
         "  [dim]Pin saves the version; install it with:[/] "
-        f"[cyan]dexmachina use {version}[/] or [cyan]dexmachina sync frida[/]"
+        f"[cyan]pindroid use {version}[/] or [cyan]pindroid sync frida[/]"
     )
     if len(group) > 1:
         console.print(f"  Companions (frida-tools, objection, …) follow automatically")
@@ -1030,7 +1030,7 @@ def fix_cmd(
 
     Each planned fix shows an \bIMPACT level (low / medium / high) describing
     how disruptive the change is — not a security score. See the legend in the
-    fix plan output, or run: dexmachina fix --dry-run
+    fix plan output, or run: pindroid fix --dry-run
     """
     print_banner(console, compact=True)
     cfg = _load_cfg()
@@ -1071,7 +1071,7 @@ def info_cmd(tool: str | None, category: str | None) -> None:
         suggestions = _suggest_tools(tool)
         if suggestions:
             console.print("[dim]Did you mean:[/] " + ", ".join(f"[cyan]{s}[/]" for s in suggestions))
-        console.print("\n[dim]List all tools:[/] [cyan]dexmachina info[/]")
+        console.print("\n[dim]List all tools:[/] [cyan]pindroid info[/]")
         sys.exit(1)
 
     t = get_tool(resolved)
@@ -1111,7 +1111,7 @@ def info_cmd(tool: str | None, category: str | None) -> None:
 @main.group("config", invoke_without_command=True)
 @click.pass_context
 def config_group(ctx: click.Context) -> None:
-    """View or modify dexmachina.toml."""
+    """View or modify pindroid.toml."""
     if ctx.invoked_subcommand is None:
         path = ensure_config()
         cfg = load_config(path)
@@ -1151,10 +1151,10 @@ def config_path_cmd() -> None:
     type=click.Choice(profile_names()),
     help="Default environment profile to record in config",
 )
-@click.option("--force", is_flag=True, help="Overwrite an existing dexmachina.toml")
+@click.option("--force", is_flag=True, help="Overwrite an existing pindroid.toml")
 @click.option("--dir", "target", default=None, help="Workspace directory (default: git root or cwd)")
 def init_cmd(profile: str, force: bool, target: str | None) -> None:
-    """Set up a repo-local DexMachina workspace (config + .gitignore + tools dir)."""
+    """Set up a repo-local PinDroid workspace (config + .gitignore + tools dir)."""
     from pathlib import Path
 
     print_banner(console, compact=True)
@@ -1173,13 +1173,13 @@ def init_cmd(profile: str, force: bool, target: str | None) -> None:
             + ", ".join(result.gitignore_added)
         )
     else:
-        lines.append("[dim].gitignore already covers .dexmachina/[/]")
+        lines.append("[dim].gitignore already covers .pindroid/[/]")
     lines.append(f"[dim]Default profile:[/] [cyan]{result.profile}[/]")
 
     console.print(Panel("\n".join(lines), title="[bold]Workspace ready[/]", border_style="#00ff41"))
     console.print(
-        "\nNext: [cyan]dexmachina up[/]  (install the profile + frida)  ·  "
-        "[cyan]dexmachina shell[/]  (enter a ready environment)"
+        "\nNext: [cyan]pindroid up[/]  (install the profile + frida)  ·  "
+        "[cyan]pindroid shell[/]  (enter a ready environment)"
     )
 
 
@@ -1206,7 +1206,7 @@ def _setup_frida(cfg: dict, version: str | None) -> str | None:
 @click.option("--frida-version", default=None, help="Frida runtime version (default: pinned/latest)")
 @click.option("--no-frida", is_flag=True, help="Skip frida venv setup")
 @click.option("--yes", "-y", is_flag=True, help="Run non-interactively (CI/headless)")
-@click.option("--no-lock", is_flag=True, help="Do not write dexmachina.lock.toml")
+@click.option("--no-lock", is_flag=True, help="Do not write pindroid.lock.toml")
 def up_cmd(
     profile: str | None,
     frida_version: str | None,
@@ -1219,7 +1219,7 @@ def up_cmd(
 
     # Auto-init a repo-local workspace when inside a git repo with no config yet.
     git_root = find_git_root()
-    if git_root and not (git_root / "dexmachina.toml").exists():
+    if git_root and not (git_root / "pindroid.toml").exists():
         result = init_workspace(git_root, profile=profile or DEFAULT_PROFILE)
         if result.created_config:
             console.print(f"[green]✓[/] Initialized workspace at [bold]{result.config_path}[/]")
@@ -1285,7 +1285,7 @@ def up_cmd(
             first_line = err.splitlines()[0] if err else "unknown error"
             summary.append(f"  [red]✗[/] {name}: {first_line}")
         summary.append("")
-        summary.append("[dim]Retry one tool:[/] [cyan]dexmachina get <tool>[/]")
+        summary.append("[dim]Retry one tool:[/] [cyan]pindroid get <tool>[/]")
         border = "#d7af00"
     else:
         summary = ["[bold green]◈ Environment ready.[/]"]
@@ -1294,10 +1294,10 @@ def up_cmd(
     console.print(Panel("\n".join(summary), border_style=border))
     console.print(
         "\nUse your tools:\n"
-        "  [cyan]dexmachina shell[/]            enter a subshell with everything on PATH\n"
-        "  [cyan]dexmachina env[/]              print PATH setup for your shell\n"
-        "  [cyan]dexmachina device ready[/]     push frida-server to a connected device\n"
-        "  [cyan]dexmachina status --offline[/] see what's installed"
+        "  [cyan]pindroid shell[/]            enter a subshell with everything on PATH\n"
+        "  [cyan]pindroid env[/]              print PATH setup for your shell\n"
+        "  [cyan]pindroid device ready[/]     push frida-server to a connected device\n"
+        "  [cyan]pindroid status --offline[/] see what's installed"
     )
 
 
@@ -1315,7 +1315,7 @@ def profile_list() -> None:
     from rich.table import Table
 
     table = Table(
-        title="[bold cyan]DexMachina Profiles[/]",
+        title="[bold cyan]PinDroid Profiles[/]",
         header_style="bold #00ff41",
         border_style="#3a6652",
     )
@@ -1326,7 +1326,7 @@ def profile_list() -> None:
         tools = resolve_profile(name)
         table.add_row(name, str(len(tools)), profile_description(name))
     console.print(table)
-    console.print("\nBuild one: [cyan]dexmachina up --profile dynamic[/]")
+    console.print("\nBuild one: [cyan]pindroid up --profile dynamic[/]")
 
 
 @profile_group.command("show")
@@ -1356,25 +1356,25 @@ def profile_show(name: str) -> None:
 
 @main.command("lock")
 def lock_cmd() -> None:
-    """Write dexmachina.lock.toml capturing the current installed kit."""
+    """Write pindroid.lock.toml capturing the current installed kit."""
     cfg = _load_cfg()
     warm_version_cache(cfg)
     path = write_lock(cfg)
     console.print(f"[green]✓[/] Lockfile written: [bold]{path}[/]")
-    console.print("[dim]Commit it so teammates can reproduce with[/] [cyan]dexmachina restore[/]")
+    console.print("[dim]Commit it so teammates can reproduce with[/] [cyan]pindroid restore[/]")
 
 
 @main.command("restore")
 @click.option("--yes", "-y", is_flag=True, help="Run non-interactively")
 def restore_cmd(yes: bool) -> None:
-    """Install tools/frida exactly as recorded in dexmachina.lock.toml."""
+    """Install tools/frida exactly as recorded in pindroid.lock.toml."""
     print_banner(console, compact=True)
     cfg = _load_cfg()
     lock = read_lock(cfg)
     if not lock:
         console.print(
             f"[yellow]No lockfile found at[/] {lock_path(cfg)}\n"
-            "Create one with: [cyan]dexmachina lock[/]"
+            "Create one with: [cyan]pindroid lock[/]"
         )
         sys.exit(1)
 
@@ -1399,7 +1399,7 @@ def restore_cmd(yes: bool) -> None:
         console.print(f"[red]✗[/] {name}: {err}")
     if failures:
         sys.exit(1)
-    console.print("\n[bold green]◈ Environment restored.[/] Enter it: [cyan]dexmachina shell[/]")
+    console.print("\n[bold green]◈ Environment restored.[/] Enter it: [cyan]pindroid shell[/]")
 
 
 @main.command("get")
@@ -1426,16 +1426,16 @@ def get_cmd(tool: str, ver: str | None, force: bool) -> None:
         console.print(f"[red]Error:[/] {e}")
         sys.exit(1)
 
-    # Verify the tool is now resolvable on the DexMachina PATH.
+    # Verify the tool is now resolvable on the PinDroid PATH.
     inv = lookup_invocation(resolved) or lookup_invocation(get_tool(resolved).binary_name or "")
     if inv:
         _, _, status = format_arsenal_row(inv, _load_cfg())
         if "ready" in status:
-            console.print(f"[green]✓[/] [bold]{resolved}[/] is ready. Run it: [cyan]dexmachina {inv.name}[/]")
+            console.print(f"[green]✓[/] [bold]{resolved}[/] is ready. Run it: [cyan]pindroid {inv.name}[/]")
         else:
             console.print(
                 f"[yellow]Installed, but '{resolved}' isn't on PATH yet.[/]\n"
-                "Enter a ready shell: [cyan]dexmachina shell[/]  ·  or print PATH: [cyan]dexmachina env[/]"
+                "Enter a ready shell: [cyan]pindroid shell[/]  ·  or print PATH: [cyan]pindroid env[/]"
             )
     if read_lock(cfg) is not None:
         write_lock(_load_cfg())
@@ -1452,7 +1452,7 @@ def device_group(ctx: click.Context) -> None:
 @device_group.command("list")
 def device_list() -> None:
     """List connected ADB devices."""
-    from dexmachina.device import DeviceError, list_devices
+    from pindroid.device import DeviceError, list_devices
 
     cfg = _load_cfg()
     try:
@@ -1472,7 +1472,7 @@ def device_list() -> None:
 @click.option("--device", "-d", "serial", default=None, help="ADB device serial")
 def device_root_server(serial: str | None) -> None:
     """Restart frida-server as root (required for attach on rooted phones)."""
-    from dexmachina.device import (
+    from pindroid.device import (
         DEFAULT_FRIDA_SERVER_PATH,
         device_has_su,
         frida_server_status,
@@ -1511,7 +1511,7 @@ def device_root_server(serial: str | None) -> None:
 @click.option("--frida-version", default=None, help="Frida runtime to ensure active")
 def device_ready(serial: str | None, frida_version: str | None) -> None:
     """Get a device frida-ready: ensure runtime, push frida-server, verify."""
-    from dexmachina.device import DeviceError, list_devices
+    from pindroid.device import DeviceError, list_devices
 
     print_banner(console, compact=True)
     cfg = _load_cfg()
@@ -1535,9 +1535,9 @@ def device_ready(serial: str | None, frida_version: str | None) -> None:
     if not active:
         console.print(
             "[red]Could not establish a frida runtime.[/] "
-            "Try: [cyan]dexmachina use latest[/]\n"
+            "Try: [cyan]pindroid use latest[/]\n"
             "[dim]If you still see a bogus version like 9.9.9, delete[/] "
-            "[cyan]%USERPROFILE%\\.dexmachina\\cache[/]"
+            "[cyan]%USERPROFILE%\\.pindroid\\cache[/]"
         )
         sys.exit(1)
     console.print(f"[green]✓[/] Frida runtime: [bold]{active}[/]")
@@ -1549,14 +1549,14 @@ def device_ready(serial: str | None, frida_version: str | None) -> None:
         console.print(f"[red]push-server failed:[/] {e}")
         sys.exit(1)
 
-    from dexmachina.device import frida_server_status, print_frida_attach_troubleshooting
+    from pindroid.device import frida_server_status, print_frida_attach_troubleshooting
 
     status = frida_server_status(cfg, serial)
     if status.device_rooted and not status.runs_as_root:
         console.print(
             "\n[red]frida-server is running but NOT as root[/] — hooks will fail.\n"
             "[dim]Approve the Magisk prompt on the phone, then run:[/] "
-            "[cyan]dexmachina device root-server[/]"
+            "[cyan]pindroid device root-server[/]"
         )
         print_frida_attach_troubleshooting(cfg, serial=serial)
         sys.exit(1)
@@ -1567,16 +1567,16 @@ def device_ready(serial: str | None, frida_version: str | None) -> None:
     except RunError:
         code = 1
     if code == 0:
-        console.print("\n[bold green]◈ Device is frida-ready.[/] Try: [cyan]dexmachina hook --foremost[/]")
+        console.print("\n[bold green]◈ Device is frida-ready.[/] Try: [cyan]pindroid hook --foremost[/]")
     else:
         console.print(
             "\n[yellow]frida-server pushed, but frida-ps -U didn't list processes.[/] "
-            "Give it a moment, then retry: [cyan]dexmachina frida-ps -U[/]"
+            "Give it a moment, then retry: [cyan]pindroid frida-ps -U[/]"
         )
 
 
 def _register_tool_runners() -> None:
-    """Register each runnable tool as a top-level dexmachina subcommand."""
+    """Register each runnable tool as a top-level pindroid subcommand."""
     seen: set[str] = set()
     for inv in list_runnable_tools():
         if inv.name in seen:

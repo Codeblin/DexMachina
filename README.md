@@ -1,16 +1,16 @@
-# DexMachina
+# PinDroid
 
-[![CI](https://github.com/Codeblin/dexmachina/actions/workflows/ci.yml/badge.svg)](https://github.com/Codeblin/dexmachina/actions/workflows/ci.yml)
+[![CI](https://github.com/Codeblin/pindroid/actions/workflows/ci.yml/badge.svg)](https://github.com/Codeblin/pindroid/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
 [![Security policy](https://img.shields.io/badge/security-policy-green)](SECURITY.md)
 
 **Android pentest environment manager** — install, sync, diagnose, and repair your entire mobile security toolkit from one CLI.
 
-DexMachina is evolving from a tool manager into a full **Android penetration environment**: one command to get adb, frida, jadx, apktool, and the rest of your kit installed, version-locked, and working together. It solves dependency hell — tools like `objection`, `r2frida`, and `frida-tools` all require the exact same `frida` version, and `apktool` needs a compatible JDK.
+PinDroid is evolving from a tool manager into a full **Android penetration environment**: one command to get adb, frida, jadx, apktool, and the rest of your kit installed, version-locked, and working together. It solves dependency hell — tools like `objection`, `r2frida`, and `frida-tools` all require the exact same `frida` version, and `apktool` needs a compatible JDK.
 
-## Why DexMachina
+## Why PinDroid
 
-Most Android pentest setups grow from shell history, old notes, and a handful of one-off install scripts. DexMachina turns that into a repo-local, reproducible environment: curated profiles, version pins, a lockfile, Frida runtime isolation, device readiness checks, and `doctor`/`fix` when the setup drifts.
+Most Android pentest setups grow from shell history, old notes, and a handful of one-off install scripts. PinDroid turns that into a repo-local, reproducible environment: curated profiles, version pins, a lockfile, Frida runtime isolation, device readiness checks, and `doctor`/`fix` when the setup drifts.
 
 It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineering judgment. It is the glue layer that gets a consistent workstation and rooted emulator/device ready faster than rebuilding the same adb/frida/objection/jadx setup for every engagement.
 
@@ -45,15 +45,15 @@ It is not a replacement for MobSF, Corellium, Burp, or manual reverse-engineerin
 
 ### Recommended: pipx
 
-`pipx` installs DexMachina in an isolated environment and exposes the
-`dexmachina` command on your shell `PATH`.
+`pipx` installs PinDroid in an isolated environment and exposes the
+`pindroid` command on your shell `PATH`.
 
 ```bash
 # Kali/Debian/Ubuntu
 sudo apt update
 sudo apt install -y pipx
 pipx ensurepath
-pipx install dexmachina
+pipx install pindroid
 ```
 
 On other Python installs where `pipx` is not packaged by the OS:
@@ -61,19 +61,19 @@ On other Python installs where `pipx` is not packaged by the OS:
 ```bash
 python -m pip install --user pipx
 python -m pipx ensurepath
-python -m pipx install dexmachina
+python -m pipx install pindroid
 ```
 
 Restart your terminal, then verify:
 
 ```bash
-dexmachina --help
+pindroid --help
 ```
 
 ### PyPI with pip
 
 ```bash
-python -m pip install dexmachina
+python -m pip install pindroid
 ```
 
 On Kali, Debian 12+, Ubuntu 23.04+, and other PEP 668 distributions, system
@@ -83,29 +83,29 @@ instead, or install inside a virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install dexmachina
-dexmachina --help
+python -m pip install pindroid
+pindroid --help
 ```
 
 Avoid `--break-system-packages` unless you intentionally want to modify the OS
 Python environment.
 
-If the install succeeds but `dexmachina` is not found, your Python scripts
-directory is not on `PATH`. You can still run DexMachina as a module:
+If the install succeeds but `pindroid` is not found, your Python scripts
+directory is not on `PATH`. You can still run PinDroid as a module:
 
 ```bash
-python -m dexmachina --help
+python -m pindroid --help
 ```
 
 Or add the scripts directory printed by pip to your shell `PATH`. Common fixes:
 
 ```bash
 # Linux/macOS user installs
-python -m pip install --user dexmachina
+python -m pip install --user pindroid
 export PATH="$HOME/.local/bin:$PATH"
 
 # Windows PowerShell user installs
-py -m pip install --user dexmachina
+py -m pip install --user pindroid
 $env:PATH = "$env:APPDATA\Python\Python311\Scripts;$env:PATH"
 ```
 
@@ -114,7 +114,7 @@ use the Python launcher, this always works even when the console script is not
 on `PATH`:
 
 ```powershell
-py -m dexmachina --help
+py -m pindroid --help
 ```
 
 ### From GitHub
@@ -122,60 +122,60 @@ py -m dexmachina --help
 Install the latest `master` directly:
 
 ```bash
-python -m pip install "git+https://github.com/Codeblin/DexMachina.git"
+python -m pip install "git+https://github.com/Codeblin/PinDroid.git"
 ```
 
 Install a specific release tag:
 
 ```bash
-python -m pip install "git+https://github.com/Codeblin/DexMachina.git@v0.1.0"
+python -m pip install "git+https://github.com/Codeblin/PinDroid.git@v0.1.0"
 ```
 
 ### Developer install
 
 ```bash
-git clone https://github.com/Codeblin/dexmachina.git
-cd dexmachina
+git clone https://github.com/Codeblin/pindroid.git
+cd pindroid
 python -m pip install -e ".[dev]"
 ```
 
 Run via the installed entrypoint or as a module:
 
 ```bash
-dexmachina --help          # full ASCII banner + commands
-dexmachina status          # compact banner + tool table
-python -m dexmachina doctor
+pindroid --help          # full ASCII banner + commands
+pindroid status          # compact banner + tool table
+python -m pindroid doctor
 ```
 
-Set `DEXMACHINA_NO_BANNER=1` or pass `--no-banner` to suppress the ASCII art (useful for scripts/CI).
+Set `PINDROID_NO_BANNER=1` or pass `--no-banner` to suppress the ASCII art (useful for scripts/CI).
 
 ## Use it as a self-contained pentest environment (recommended)
 
 Turn any repo into a portable Android pentest kit. Tools are downloaded into
-`./.dexmachina/tools/`, version-locked, and added to your `PATH` on demand —
+`./.pindroid/tools/`, version-locked, and added to your `PATH` on demand —
 the heavy binaries stay **gitignored**, while the config and lockfile are
 committed for reproducibility.
 
 ```bash
 cd my-engagement-repo
 
-dexmachina init                 # create dexmachina.toml + .gitignore + .dexmachina/tools
-dexmachina up                   # install the profile + set up frida (one command)
-dexmachina console              # interactive pentest REPL (recommended)
-dexmachina shell                # …or a raw subshell with every tool on PATH
+pindroid init                 # create pindroid.toml + .gitignore + .pindroid/tools
+pindroid up                   # install the profile + set up frida (one command)
+pindroid console              # interactive pentest REPL (recommended)
+pindroid shell                # …or a raw subshell with every tool on PATH
 ```
 
-Inside `dexmachina shell`, tools like `jadx`, `apktool`, `objection`, and
+Inside `pindroid shell`, tools like `jadx`, `apktool`, `objection`, and
 `frida` are directly on your `PATH`. Type `exit` to leave.
 
 If `doctor` or `fix` reports that a managed tool is installed but not on your
-shell `PATH`, use DexMachina's managed environment instead of editing global
+shell `PATH`, use PinDroid's managed environment instead of editing global
 shell startup files:
 
 ```bash
-dexmachina shell
+pindroid shell
 # or:
-eval "$(dexmachina env)"
+eval "$(pindroid env)"
 ```
 
 ## Pentest a rooted emulator — full walkthrough
@@ -185,25 +185,25 @@ Genymotion / rooted AVD / Corellium instance, visible via `adb devices`):
 
 ```bash
 # 0) one-time: build the dynamic-analysis kit (adb, frida, objection, …)
-dexmachina up --profile dynamic
+pindroid up --profile dynamic
 
 # 1) drop into the interactive console
-dexmachina console
+pindroid console
 ```
 
-Then drive the engagement from the **DexMachina console**:
+Then drive the engagement from the **PinDroid console**:
 
 ```text
-dexmachina [no-device | no-target]> devices          # auto-selects a single device
-dexmachina [emulator-5554 | no-target]> ready        # push + start frida-server
-dexmachina [emulator-5554 | no-target]> apps owasp   # find your target (filter)
-dexmachina [emulator-5554 | no-target]> target com.example.app
-dexmachina [emulator-5554 | com.example.app]> status # device + frida + target summary
-dexmachina [emulator-5554 | com.example.app]> proxy 10.0.2.2:8080   # route HTTPS to Burp
-dexmachina [emulator-5554 | com.example.app]> hook   # SSL pinning + root bypass (spawn)
-dexmachina [emulator-5554 | com.example.app]> objection             # interactive explorer
-dexmachina [emulator-5554 | com.example.app]> logcat com.example.app   # watch logs
-dexmachina [emulator-5554 | com.example.app]> exit
+pindroid [no-device | no-target]> devices          # auto-selects a single device
+pindroid [emulator-5554 | no-target]> ready        # push + start frida-server
+pindroid [emulator-5554 | no-target]> apps owasp   # find your target (filter)
+pindroid [emulator-5554 | no-target]> target com.example.app
+pindroid [emulator-5554 | com.example.app]> status # device + frida + target summary
+pindroid [emulator-5554 | com.example.app]> proxy 10.0.2.2:8080   # route HTTPS to Burp
+pindroid [emulator-5554 | com.example.app]> hook   # SSL pinning + root bypass (spawn)
+pindroid [emulator-5554 | com.example.app]> objection             # interactive explorer
+pindroid [emulator-5554 | com.example.app]> logcat com.example.app   # watch logs
+pindroid [emulator-5554 | com.example.app]> exit
 ```
 
 The console keeps **live session state** (selected device + target app), so you
@@ -226,61 +226,61 @@ CLI uses (`device ready`, `bypass`, `objection`, …) — just faster to chain.
 | `screenshot [file.png]` | Capture the screen to a local PNG |
 | `adb <args>` / `adbshell` | Run adb / open an interactive adb shell |
 | `pull` / `push` | Copy files off/onto the device |
-| `ps` / `run <tool> [args]` | List processes / run any DexMachina tool |
+| `ps` / `run <tool> [args]` | List processes / run any PinDroid tool |
 | `clear` · `help` · `exit` | Housekeeping |
 
 Reproduce the exact kit on another machine:
 
 ```bash
-dexmachina lock                 # write dexmachina.lock.toml (commit this)
+pindroid lock                 # write pindroid.lock.toml (commit this)
 # … teammate clones the repo …
-dexmachina restore              # install the locked tools + frida runtime
+pindroid restore              # install the locked tools + frida runtime
 ```
 
 ## Quick Start
 
 ```bash
 # One-command environment (auto-inits a repo-local workspace inside a git repo)
-dexmachina up --profile dynamic
+pindroid up --profile dynamic
 
 # See / inspect profiles
-dexmachina profile list
-dexmachina profile show static
+pindroid profile list
+pindroid profile show static
 
 # Drive an engagement interactively
-dexmachina console              # pentest REPL with live device + target state
+pindroid console              # pentest REPL with live device + target state
 
 # Put every installed tool on PATH
-dexmachina shell                # subshell (easiest)
-dexmachina env                  # or print the PATH snippet for your shell
+pindroid shell                # subshell (easiest)
+pindroid env                  # or print the PATH snippet for your shell
 
 # Get a single tool, downloaded + on PATH + verified
-dexmachina get jadx
+pindroid get jadx
 
 # Get a device frida-ready in one shot (runtime + push-server + verify)
-dexmachina device ready
+pindroid device ready
 
 # Check what's installed vs latest (use --offline to skip network)
-dexmachina status --offline
+pindroid status --offline
 
 # Diagnose / auto-repair
-dexmachina doctor
-dexmachina fix --bootstrap
+pindroid doctor
+pindroid fix --bootstrap
 ```
 
 ### When to run `up`
 
-Run `dexmachina up` when creating an environment, after cloning an engagement
+Run `pindroid up` when creating an environment, after cloning an engagement
 workspace, or after changing its profile, pins, or lockfile. It is safe to run
 again: tools and Frida environments that already satisfy the configuration are
-skipped. Use `dexmachina update` for upgrades and `--force` only when you
+skipped. Use `pindroid update` for upgrades and `--force` only when you
 intentionally want a reinstall.
 
 For a normal daily pentest session, you usually only need:
 
 ```bash
-dexmachina device ready          # reconnect/restart the matching frida-server
-dexmachina console               # resume device + target workflow
+pindroid device ready          # reconnect/restart the matching frida-server
+pindroid console               # resume device + target workflow
 ```
 
 ## Commands
@@ -289,46 +289,46 @@ dexmachina console               # resume device + target workflow
 
 | Command | Description |
 |---------|-------------|
-| `dexmachina init [--profile NAME] [--force]` | Create a repo-local workspace (config + `.gitignore` + `.dexmachina/tools`) |
-| `dexmachina up [--profile NAME] [--no-frida] [--yes]` | Build the environment: install a profile + set up frida + write lockfile |
-| `dexmachina console [--device SERIAL]` | Interactive pentest REPL with live device + target state |
-| `dexmachina shell` | Open a subshell with every installed tool on `PATH` |
-| `dexmachina profile list` / `show <name>` | List profiles or inspect a profile's tools |
-| `dexmachina lock` | Write `dexmachina.lock.toml` from the current kit |
-| `dexmachina restore [--yes]` | Install tools/frida exactly as recorded in the lockfile |
+| `pindroid init [--profile NAME] [--force]` | Create a repo-local workspace (config + `.gitignore` + `.pindroid/tools`) |
+| `pindroid up [--profile NAME] [--no-frida] [--yes]` | Build the environment: install a profile + set up frida + write lockfile |
+| `pindroid console [--device SERIAL]` | Interactive pentest REPL with live device + target state |
+| `pindroid shell` | Open a subshell with every installed tool on `PATH` |
+| `pindroid profile list` / `show <name>` | List profiles or inspect a profile's tools |
+| `pindroid lock` | Write `pindroid.lock.toml` from the current kit |
+| `pindroid restore [--yes]` | Install tools/frida exactly as recorded in the lockfile |
 
 ### Environment
 
 | Command | Description |
 |---------|-------------|
-| `dexmachina status [--category NAME] [--offline]` | Table of installed vs latest versions |
-| `dexmachina install <tool> [--version X.Y.Z] [--force]` | Install tool + dependencies |
-| `dexmachina get <tool>` | Install a tool, put it on `PATH`, and verify it's runnable |
-| `dexmachina install --all` | Install entire registry (topological order) |
-| `dexmachina update [tool] [--all] [--force]` | Update to latest; pin groups update atomically |
-| `dexmachina pin <tool> <version>` | Lock tool/pin-group version in config |
-| `dexmachina unpin <tool>` | Remove version lock |
-| `dexmachina env [--frida-only]` | Print PATH setup for all tools (or just the frida venv) |
-| `dexmachina doctor` | Environment health report |
-| `dexmachina fix [--dry-run] [--yes] [--bootstrap] [--aggressive]` | Diagnose and auto-repair issues |
+| `pindroid status [--category NAME] [--offline]` | Table of installed vs latest versions |
+| `pindroid install <tool> [--version X.Y.Z] [--force]` | Install tool + dependencies |
+| `pindroid get <tool>` | Install a tool, put it on `PATH`, and verify it's runnable |
+| `pindroid install --all` | Install entire registry (topological order) |
+| `pindroid update [tool] [--all] [--force]` | Update to latest; pin groups update atomically |
+| `pindroid pin <tool> <version>` | Lock tool/pin-group version in config |
+| `pindroid unpin <tool>` | Remove version lock |
+| `pindroid env [--frida-only]` | Print PATH setup for all tools (or just the frida venv) |
+| `pindroid doctor` | Environment health report |
+| `pindroid fix [--dry-run] [--yes] [--bootstrap] [--aggressive]` | Diagnose and auto-repair issues |
 
 ### Device & arsenal
 
 | Command | Description |
 |---------|-------------|
-| `dexmachina device list` | List connected ADB devices |
-| `dexmachina device ready [--device SERIAL]` | Ensure frida runtime + push frida-server + verify with `frida-ps -U` |
-| `dexmachina push-server [--device SERIAL] [--no-start]` | Push frida-server matching local frida |
-| `dexmachina info [tool]` | Tool catalog, or detail card for one tool |
-| `dexmachina arsenal` | List runnable tool CLIs (ready / missing) |
-| `dexmachina run <tool> [args…]` | Run a tool via explicit dispatch |
-| `dexmachina <tool> [args…]` | Direct dispatch (e.g. `dexmachina frida -U`) |
-| `dexmachina config` | Show `dexmachina.toml` |
-| `dexmachina config set <key> <value>` | Update a setting |
+| `pindroid device list` | List connected ADB devices |
+| `pindroid device ready [--device SERIAL]` | Ensure frida runtime + push frida-server + verify with `frida-ps -U` |
+| `pindroid push-server [--device SERIAL] [--no-start]` | Push frida-server matching local frida |
+| `pindroid info [tool]` | Tool catalog, or detail card for one tool |
+| `pindroid arsenal` | List runnable tool CLIs (ready / missing) |
+| `pindroid run <tool> [args…]` | Run a tool via explicit dispatch |
+| `pindroid <tool> [args…]` | Direct dispatch (e.g. `pindroid frida -U`) |
+| `pindroid config` | Show `pindroid.toml` |
+| `pindroid config set <key> <value>` | Update a setting |
 
 ## Profiles
 
-Profiles are curated tool bundles for one-command setup with `dexmachina up --profile NAME`:
+Profiles are curated tool bundles for one-command setup with `pindroid up --profile NAME`:
 
 | Profile | Tools |
 |---------|-------|
@@ -341,30 +341,30 @@ Profiles are curated tool bundles for one-command setup with `dexmachina up --pr
 
 ## Repo-local layout
 
-`dexmachina init` produces a portable, reproducible workspace:
+`pindroid init` produces a portable, reproducible workspace:
 
 ```text
 my-repo/
-├── dexmachina.toml         # committed — settings + profile + pins
-├── dexmachina.lock.toml    # committed — exact installed versions (dexmachina lock)
+├── pindroid.toml         # committed — settings + profile + pins
+├── pindroid.lock.toml    # committed — exact installed versions (pindroid lock)
 ├── .gitignore              # auto-updated to ignore downloaded tools
-└── .dexmachina/
+└── .pindroid/
     ├── tools/              # downloaded CLIs/jars (gitignored)
     └── cache/              # PyPI/GitHub cache (gitignored)
 ```
 
-Frida runtimes live in per-version venvs under `~/.dexmachina/venvs/` (machine-specific,
-recreated by `dexmachina use` / `dexmachina restore`), so they're never committed.
+Frida runtimes live in per-version venvs under `~/.pindroid/venvs/` (machine-specific,
+recreated by `pindroid use` / `pindroid restore`), so they're never committed.
 
 ## Configuration
 
-`~/.dexmachina/dexmachina.toml` (or `./dexmachina.toml` in the project directory):
+`~/.pindroid/pindroid.toml` (or `./pindroid.toml` in the project directory):
 
 ```toml
 [settings]
 adb_path = "adb"
 java_path = "java"
-install_dir = "~/.dexmachina/tools"
+install_dir = "~/.pindroid/tools"
 auto_push_frida_server = false
 
 [pins]
@@ -378,33 +378,33 @@ tools = ["ghidra", "wireshark"]
 
 The **frida runtime** (pip package `frida`) uses the version you care about for device hooks — e.g. `17.11.0`.
 
-**frida-tools** and **objection** have **their own** pip version numbers (e.g. `14.9.0`, `1.12.5`) but must be compatible with the frida runtime. DexMachina never installs `frida-tools==17.11.0` — that was the old bug.
+**frida-tools** and **objection** have **their own** pip version numbers (e.g. `14.9.0`, `1.12.5`) but must be compatible with the frida runtime. PinDroid never installs `frida-tools==17.11.0` — that was the old bug.
 
 | Command | What it does |
 |---------|----------------|
-| `dexmachina use 17.11.0` | **nvm-style** — create/select isolated venv for this runtime |
-| `dexmachina use latest` | Use latest frida release |
-| `dexmachina sync frida` | Align global pip: exact frida + upgrade companions |
-| `dexmachina pin frida 17.11.0` | Save preference in config (then `use` or `sync`) |
-| `dexmachina versions frida` | Show active, pinned, installed, PyPI releases |
-| `dexmachina env` | Print `PATH` snippet for active venv |
+| `pindroid use 17.11.0` | **nvm-style** — create/select isolated venv for this runtime |
+| `pindroid use latest` | Use latest frida release |
+| `pindroid sync frida` | Align global pip: exact frida + upgrade companions |
+| `pindroid pin frida 17.11.0` | Save preference in config (then `use` or `sync`) |
+| `pindroid versions frida` | Show active, pinned, installed, PyPI releases |
+| `pindroid env` | Print `PATH` snippet for active venv |
 
-After `dexmachina use X`, run the `dexmachina env` output in your shell, then `dexmachina push-server`.
+After `pindroid use X`, run the `pindroid env` output in your shell, then `pindroid push-server`.
 
-### Arsenal — run tools through DexMachina
+### Arsenal — run tools through PinDroid
 
 Tools with a CLI are registered as native commands:
 
 ```bash
-dexmachina arsenal              # ready vs missing
-dexmachina frida --version
-dexmachina frida-ps -U
-dexmachina objection explore
-dexmachina jadx --help
-dexmachina run mitmproxy        # explicit form
+pindroid arsenal              # ready vs missing
+pindroid frida --version
+pindroid frida-ps -U
+pindroid objection explore
+pindroid jadx --help
+pindroid run mitmproxy        # explicit form
 ```
 
-Resolution order: **active frida venv** → `~/.dexmachina/tools/*/bin` → system `PATH`.
+Resolution order: **active frida venv** → `~/.pindroid/tools/*/bin` → system `PATH`.
 
 ## Tool Categories
 
@@ -419,7 +419,7 @@ Resolution order: **active frida venv** → `~/.dexmachina/tools/*/bin` → syst
 
 Manual-only tools appear in `status` and `doctor` with install instructions but are not auto-installed.
 
-## `dexmachina fix`
+## `pindroid fix`
 
 Three-phase repair flow: **diagnose → plan → apply → re-check**.
 
@@ -452,13 +452,13 @@ Each fix shows an **Impact** column — how disruptive the change is, **not** a 
 |-------|---------|
 | **Low impact** | One tool or device; easily reversed (install adb, push frida-server, reinstall one tool) |
 | **Medium impact** | Multiple packages or version bumps together (sync frida pin group, `--aggressive` updates) |
-| **High impact / manual** | DexMachina cannot apply automatically (upgrade Python, install JDK, plug in a device) |
+| **High impact / manual** | PinDroid cannot apply automatically (upgrade Python, install JDK, plug in a device) |
 
-Every `dexmachina fix` run prints a legend panel explaining these before the plan. Use `--no-legend` to hide it.
+Every `pindroid fix` run prints a legend panel explaining these before the plan. Use `--no-legend` to hide it.
 
 ## Roadmap: Pentest Environment
 
-DexMachina aims to become a batteries-included Android pentest environment:
+PinDroid aims to become a batteries-included Android pentest environment:
 
 - **Today** — tool registry, version pinning, doctor, fix, frida-server push
 - **Next** — environment profiles (`minimal`, `dynamic`, `full`), PATH/setup shell hook, workspace templates
@@ -466,15 +466,15 @@ DexMachina aims to become a batteries-included Android pentest environment:
 
 ## GitHub API
 
-Release versions are fetched from the GitHub Releases API with a 1-hour cache in `~/.dexmachina/cache/`. Set `GITHUB_TOKEN` to avoid rate limits.
+Release versions are fetched from the GitHub Releases API with a 1-hour cache in `~/.pindroid/cache/`. Set `GITHUB_TOKEN` to avoid rate limits.
 
 On Kali or shared networks you may hit unauthenticated GitHub API limits during
-`dexmachina up`, `install`, or `fix --bootstrap`. Create a fine-grained GitHub
+`pindroid up`, `install`, or `fix --bootstrap`. Create a fine-grained GitHub
 token with read-only public repository access and export it before retrying:
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-dexmachina fix --bootstrap
+pindroid fix --bootstrap
 ```
 
 ## Development

@@ -20,12 +20,12 @@ venv/
 .venv/
 env/
 
-# DexMachina workspace (downloaded tools, caches, repo-local venvs)
-.dexmachina/
+# PinDroid workspace (downloaded tools, caches, repo-local venvs)
+.pindroid/
 
-# Local project config (from `dexmachina init` / `dexmachina lock` — user-specific)
-dexmachina.toml
-dexmachina.lock.toml
+# Local project config (from `pindroid init` / `pindroid lock` — user-specific)
+pindroid.toml
+pindroid.lock.toml
 
 # IDE / editor
 .idea/

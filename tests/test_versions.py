@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from dexmachina import versions
-from dexmachina.versions import (
+from pindroid import versions
+from pindroid.versions import (
     FRIDA_COMPANIONS,
     FRIDA_EXACT,
     ensure_frida_venv,

@@ -3,7 +3,7 @@
 
 # Release, CI, and supply-chain surfaces are especially sensitive.
 /.github/ @Codeblin
-/dexmachina/ @Codeblin
+/pindroid/ @Codeblin
 /pyproject.toml @Codeblin
 /THREAT_MODEL.md @Codeblin
 /SECURITY.md @Codeblin

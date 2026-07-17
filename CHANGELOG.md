@@ -1,14 +1,14 @@
 # Changelog
 
-All notable changes to DexMachina are documented here. This project follows Semantic Versioning while it is pre-1.0, with minor releases allowed to refine CLI behavior.
+All notable changes to PinDroid are documented here. This project follows Semantic Versioning while it is pre-1.0, with minor releases allowed to refine CLI behavior.
 
 
 ## [0.1.1] - 2026-07-15
 
 ### Fixed
 
-- Resolve DexMachina-managed adb during doctor, fix, and device flows.
-- Run Frida doctor checks through DexMachina's managed environment.
+- Resolve PinDroid-managed adb during doctor, fix, and device flows.
+- Run Frida doctor checks through PinDroid's managed environment.
 - Reload config before fix re-checks so active Frida venv changes are visible.
 - Avoid false incomplete-download failures for Google platform-tools decoded responses.
 - Improve GitHub API rate-limit guidance during installs.
@@ -16,7 +16,7 @@ All notable changes to DexMachina are documented here. This project follows Sema
 ### Documentation
 
 - Document Kali-safe pipx installation.
-- Document managed PATH usage with `dexmachina shell` and `dexmachina env`.
+- Document managed PATH usage with `pindroid shell` and `pindroid env`.
 - Document `GITHUB_TOKEN` retry path for GitHub API rate limits.
 
 ## [0.1.0] - 2026-07-14

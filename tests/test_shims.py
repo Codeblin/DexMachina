@@ -2,7 +2,7 @@
 
 import sys
 
-from dexmachina.shims.readline_win import install_readline_shim
+from pindroid.shims.readline_win import install_readline_shim
 
 
 def test_readline_shim_registers_on_windows(monkeypatch):

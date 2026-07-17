@@ -3,13 +3,13 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dexmachina"
+name = "pindroid"
 version = "0.1.1"
 description = "Android pentesting tool manager — install, update, and version-lock your toolkit"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "DexMachina Contributors" }]
+authors = [{ name = "PinDroid Contributors" }]
 keywords = ["android", "pentesting", "frida", "security"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,18 +38,18 @@ dev = [
 ]
 
 [project.scripts]
-dexmachina = "dexmachina.cli:main"
+pindroid = "pindroid.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Codeblin/dexmachina"
-Repository = "https://github.com/Codeblin/dexmachina"
-Issues = "https://github.com/Codeblin/dexmachina/issues"
-Documentation = "https://github.com/Codeblin/dexmachina#readme"
-Changelog = "https://github.com/Codeblin/dexmachina/blob/main/CHANGELOG.md"
-"Security Policy" = "https://github.com/Codeblin/dexmachina/security/policy"
+Homepage = "https://github.com/Codeblin/pindroid"
+Repository = "https://github.com/Codeblin/pindroid"
+Issues = "https://github.com/Codeblin/pindroid/issues"
+Documentation = "https://github.com/Codeblin/pindroid#readme"
+Changelog = "https://github.com/Codeblin/pindroid/blob/main/CHANGELOG.md"
+"Security Policy" = "https://github.com/Codeblin/pindroid/security/policy"
 
 [tool.coverage.run]
-source = ["dexmachina"]
+source = ["pindroid"]
 branch = true
 
 [tool.coverage.report]
@@ -58,10 +58,10 @@ skip_covered = false
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["dexmachina*"]
+include = ["pindroid*"]
 
 [tool.setuptools.package-data]
-dexmachina = ["../dexmachina.toml.default", "scripts/*.js"]
+pindroid = ["../pindroid.toml.default", "scripts/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

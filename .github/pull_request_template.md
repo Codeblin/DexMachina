@@ -5,8 +5,8 @@ Describe the change and why it matters.
 ## Testing
 
 - [ ] `python -m pytest`
-- [ ] `dexmachina --help`
-- [ ] `dexmachina status --offline`
+- [ ] `pindroid --help`
+- [ ] `pindroid status --offline`
 
 ## Device or Emulator Coverage
 

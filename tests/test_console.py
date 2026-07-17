@@ -1,10 +1,10 @@
-"""Tests for the interactive DexMachina console (REPL)."""
+"""Tests for the interactive PinDroid console (REPL)."""
 
 import subprocess
 from types import SimpleNamespace
 
-import dexmachina.console as console_mod
-from dexmachina.console import DexMachinaConsole
+import pindroid.console as console_mod
+from pindroid.console import PinDroidConsole
 
 
 def _make(monkeypatch, devices=None, apps=None):
@@ -13,7 +13,7 @@ def _make(monkeypatch, devices=None, apps=None):
     monkeypatch.setattr(
         console_mod, "list_android_apps", lambda cfg, serial=None: list(apps or [])
     )
-    return DexMachinaConsole(config={}, serial=None)
+    return PinDroidConsole(config={}, serial=None)
 
 
 def test_prompt_reflects_state(monkeypatch):
