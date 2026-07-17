@@ -2,7 +2,7 @@
 
 All notable changes to PinDroid are documented here. This project follows Semantic Versioning while it is pre-1.0, with minor releases allowed to refine CLI behavior.
 
-## [Unreleased]
+## [0.2.0] - 2026-07-17
 
 ### Changed
 
